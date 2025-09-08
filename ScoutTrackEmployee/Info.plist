@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict/>
+	</array>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+<string>We need access to save offline ticket images.</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>We need access to show offline images.</string>
+</dict>
+</plist>

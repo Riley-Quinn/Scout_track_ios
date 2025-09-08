@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23605" systemVersion="24D70" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithSwiftData="YES" userDefinedModelVersionIdentifier="">
+    <entity name="CDTicket" representedClassName="CDTicket" syncable="YES" codeGenerationType="class">
+        <attribute name="address" optional="YES" attributeType="String"/>
+        <attribute name="addressType" optional="YES" attributeType="String"/>
+        <attribute name="categoryName" optional="YES" attributeType="String"/>
+        <attribute name="cityName" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="String"/>
+        <attribute name="customerCommentsData" optional="YES" attributeType="Binary"/>
+        <attribute name="customerEmail" optional="YES" attributeType="String"/>
+        <attribute name="customerName" optional="YES" attributeType="String"/>
+        <attribute name="customerPhone" optional="YES" attributeType="String"/>
+        <attribute name="multimediaData" optional="YES" attributeType="Binary"/>
+        <attribute name="priorityRank" optional="YES" attributeType="String"/>
+        <attribute name="regionName" optional="YES" attributeType="String"/>
+        <attribute name="stateName" optional="YES" attributeType="String"/>
+        <attribute name="statusName" optional="YES" attributeType="String"/>
+        <attribute name="statusTrackerData" optional="YES" attributeType="Binary"/>
+        <attribute name="ticketDescription" optional="YES" attributeType="String"/>
+        <attribute name="ticketId" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="ticketServiceId" optional="YES" attributeType="String"/>
+        <attribute name="title" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="TicketEntity" representedClassName="TicketEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="category_name" optional="YES" attributeType="String"/>
+        <attribute name="city_name" optional="YES" attributeType="String"/>
+        <attribute name="created_at" optional="YES" attributeType="String"/>
+        <attribute name="customer_name" optional="YES" attributeType="String"/>
+        <attribute name="descriptionText" optional="YES" attributeType="String"/>
+        <attribute name="employee_arrival_date" optional="YES" attributeType="String"/>
+        <attribute name="priority_rank" optional="YES" attributeType="String"/>
+        <attribute name="region_name" optional="YES" attributeType="String"/>
+        <attribute name="status_id" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="status_name" optional="YES" attributeType="String"/>
+        <attribute name="status_tracker" optional="YES" attributeType="String"/>
+        <attribute name="ticket_id" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="ticket_service_id" optional="YES" attributeType="String"/>
+        <attribute name="title" optional="YES" attributeType="String"/>
+        <attribute name="urgency" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+    </entity>
+    <entity name="User" representedClassName="User" syncable="YES" codeGenerationType="class">
+        <attribute name="clientId" optional="YES" attributeType="String"/>
+        <attribute name="email" optional="YES" attributeType="String"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="password" optional="YES" attributeType="String"/>
+        <attribute name="role" optional="YES" attributeType="String"/>
+        <attribute name="userId" optional="YES" attributeType="String"/>
+    </entity>
+</model>
