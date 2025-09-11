@@ -1073,11 +1073,7 @@ struct CustomerInfoView: View {
                 Spacer()
             }
             TicketActionButtons(
-                ticket: ticket,
-                showArrivalSheet: $showArrivalSheet,
-                selectedTicket: $selectedTicket,
-                arrivalDate: $arrivalDate,
-                arrivalReason: $arrivalReason
+                ticket: ticket
             )
         }
         .padding()
