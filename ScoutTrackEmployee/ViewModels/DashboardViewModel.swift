@@ -20,6 +20,7 @@ class DashboardViewModel: ObservableObject {
     @Published var showEditSheet = false
     @Published var editStatus: String = ""
     @Published var editReason: String = ""
+    @Published var weeklyToDoCounts: [String: Int] = [:] // ← Add this
     private var cancellables = Set<AnyCancellable>()
     private let baseURL = "http://localhost:4200"
     private var userId: String {
@@ -52,47 +53,100 @@ class DashboardViewModel: ObservableObject {
     // MARK: - Fetch Tickets (API + Core Data)
 
     func fetchTickets() {
-        guard let url = URL(string: "\(baseURL)/api/tickets/employee/\(userId)") else { return }
+        guard let url = URL(string: "\(baseURL)/api/tickets/employee/\(userId)") else {
+            print("❌ Invalid URL")
+            return
+        }
 
         isLoading = true
+        print("📡 Fetching tickets for userId:", userId)
+
         URLSession.shared.dataTaskPublisher(for: url)
             .map { $0.data }
             .decode(type: TicketListResponse.self, decoder: JSONDecoder())
-            .map { response in
+            .map { response -> [Ticket] in
                 let isoFormatter = ISO8601DateFormatter()
                 isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
                 let isoFormatterNoMillis = ISO8601DateFormatter()
                 isoFormatterNoMillis.formatOptions = [.withInternetDateTime]
 
-                // Sort tickets: first by arrival date (if present), else by urgency
-                let sortedTickets = response.list.sorted { t1, t2 in
+                return response.list.sorted { t1, t2 in
                     let date1 = t1.employee_arrival_date.flatMap { isoFormatter.date(from: $0) ?? isoFormatterNoMillis.date(from: $0) }
                     let date2 = t2.employee_arrival_date.flatMap { isoFormatter.date(from: $0) ?? isoFormatterNoMillis.date(from: $0) }
 
                     if let d1 = date1, let d2 = date2 {
-                        return d1 < d2 // earlier arrival date first
+                        return d1 < d2
                     } else if date1 != nil {
-                        return true // tickets with arrival date come first
+                        return true
                     } else if date2 != nil {
                         return false
                     } else {
                         return (t1.urgency ?? Int.max) < (t2.urgency ?? Int.max)
                     }
                 }
-
-                return sortedTickets
             }
-
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { [weak self] completion in
-                if case .failure = completion {
+                if case let .failure(error) = completion {
+                    print("❌ Fetch tickets failed:", error)
                     self?.loadOfflineTickets()
                     self?.isLoading = false
                 }
-            }, receiveValue: { [weak self] tickets in
+            }, receiveValue: { [weak self] (tickets: [Ticket]) in
+                print("✅ Tickets fetched:", tickets.count)
+                var dayWiseToDo: [String: Int] = [:]
+
+                for ticket in tickets {
+                    print("🔹 Ticket ID:", ticket.ticket_id, "Title:", ticket.title)
+
+                    guard let trackerStr = ticket.status_tracker,
+                          let data = trackerStr.data(using: .utf8),
+                          let trackerArrayAny = try? JSONSerialization.jsonObject(with: data),
+                          let trackerArray = trackerArrayAny as? [[String: Any]]
+                    else {
+                        print("⚠️ No status_tracker or invalid JSON for ticket", ticket.ticket_id)
+                        continue
+                    }
+
+                    print("📄 Tracker array:", trackerArray)
+
+                    if let todoEntry = trackerArray.first(where: {
+                        guard let status = $0["status"] as? String else { return false }
+                        return status.lowercased() == "todo" || status.lowercased() == "to do"
+                    }) {
+                        print("✅ Found TODO entry:", todoEntry)
+
+                        // ✅ Try timestamp first, then fallback to "Date"
+                        if let dateStr = (todoEntry["timestamp"] as? String) ?? (todoEntry["Date"] as? String) {
+                            let isoFormatter = ISO8601DateFormatter()
+                            let dateFormatter = DateFormatter()
+                            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+                            dateFormatter.dateFormat = "MMM dd, yyyy, hh:mm a"
+
+                            if let date = isoFormatter.date(from: dateStr) ?? dateFormatter.date(from: dateStr) {
+                                let dayKey = DateFormatter.shortDate.string(from: date)
+                                dayWiseToDo[dayKey, default: 0] += 1
+                                print("📅 Count updated for", dayKey, ":", dayWiseToDo[dayKey]!)
+                            } else {
+                                print("❌ Could not parse TODO date string:", dateStr)
+                            }
+                        } else {
+                            print("⚠️ No timestamp or Date found for TODO entry:", todoEntry)
+                        }
+                    } else {
+                        print("⚠️ No TODO status in tracker for ticket", ticket.ticket_id)
+                    }
+                }
+
+                print("🗓 Final dayWiseToDo dict:", dayWiseToDo)
+
+                let todayKey = DateFormatter.shortDate.string(from: Date())
                 self?.tickets = tickets
+                self?.todoCount = dayWiseToDo[todayKey] ?? 0
+                self?.weeklyToDoCounts = dayWiseToDo
                 self?.isLoading = false
+
                 self?.saveTicketsOffline(tickets)
             })
             .store(in: &cancellables)

@@ -10,10 +10,12 @@
         <attribute name="customerEmail" optional="YES" attributeType="String"/>
         <attribute name="customerName" optional="YES" attributeType="String"/>
         <attribute name="customerPhone" optional="YES" attributeType="String"/>
+        <attribute name="employeeArrivalDate" optional="YES" attributeType="String"/>
         <attribute name="multimediaData" optional="YES" attributeType="Binary"/>
         <attribute name="priorityRank" optional="YES" attributeType="String"/>
         <attribute name="regionName" optional="YES" attributeType="String"/>
         <attribute name="stateName" optional="YES" attributeType="String"/>
+        <attribute name="status_id" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="statusName" optional="YES" attributeType="String"/>
         <attribute name="statusTrackerData" optional="YES" attributeType="Binary"/>
         <attribute name="ticketDescription" optional="YES" attributeType="String"/>
@@ -21,6 +23,7 @@
         <attribute name="ticketServiceId" optional="YES" attributeType="String"/>
         <attribute name="title" optional="YES" attributeType="String"/>
     </entity>
+    <entity name="Entity" representedClassName="Entity" syncable="YES" codeGenerationType="class"/>
     <entity name="TicketEntity" representedClassName="TicketEntity" syncable="YES" codeGenerationType="class">
         <attribute name="category_name" optional="YES" attributeType="String"/>
         <attribute name="city_name" optional="YES" attributeType="String"/>

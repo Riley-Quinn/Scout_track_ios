@@ -1,4 +1,69 @@
+import Charts
 import SwiftUI
+
+struct WeeklyProgressView: View {
+    var weeklyCounts: [String: Int]
+    var closedCounts: [String: Int]
+
+    struct TicketData: Identifiable {
+        let id = UUID()
+        let day: String
+        let type: String
+        let value: Int
+    }
+
+    var weeklyData: [TicketData] {
+        let days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        var countsByWeekday: [String: Int] = [:]
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd"
+
+        for (dateStr, count) in weeklyCounts {
+            if let date = df.date(from: dateStr) {
+                let weekdayIndex = Calendar.current.component(.weekday, from: date)
+                let dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][weekdayIndex - 1]
+                countsByWeekday[dayName, default: 0] += count
+            }
+        }
+
+        return days.flatMap { day in
+            [
+                TicketData(day: day, type: "ToDo", value: countsByWeekday[day] ?? 0),
+                TicketData(day: day, type: "Closed", value: closedCounts[day] ?? 0),
+            ]
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Weekly Progress")
+                .font(.headline)
+                .padding(.leading, 8)
+
+            Chart(weeklyData) { data in
+                BarMark(
+                    x: .value("Day", data.day),
+                    y: .value("Count", data.value)
+                )
+                .foregroundStyle(data.type == "ToDo" ? Color.green : Color.blue)
+                .position(by: .value("Type", data.type))
+            }
+            .frame(height: 180)
+            .chartYAxis {
+                AxisMarks(position: .leading)
+            }
+            .padding(.horizontal, 8)
+        }
+        .padding()
+        .background(Color.white)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+}
 
 struct DashboardView: View {
     @State private var navigateToAllTickets = false
@@ -17,7 +82,7 @@ struct DashboardView: View {
                 .padding()
                 .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
                 ScrollView {
-                    VStack(spacing: 16) {
+                    VStack(spacing: 8) {
                         // ✅ Status Grid
                         HStack(spacing: 12) {
                             StatusCard(title: "ToDo", count: viewModel.todoCount, color: .orange, icon: "exclamationmark.triangle")
@@ -28,7 +93,14 @@ struct DashboardView: View {
                             StatusCard(title: "On Hold", count: viewModel.onHoldCount, color: .pink, icon: "clock")
                         }
 
-                        // ✅ Tickets Section
+                        // Weekly Progress
+                        WeeklyProgressView(
+                            weeklyCounts: viewModel.weeklyToDoCounts,
+                            closedCounts: [:]
+                        )
+                        .frame(maxWidth: .infinity)
+
+                        // Today Tickets Section
                         HStack {
                             Text("Today Tickets")
                                 .font(.headline)
@@ -36,7 +108,7 @@ struct DashboardView: View {
                             Button("View All") {
                                 navigateToAllTickets = true
                             }
-                            Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.subheadline)
                         }
                         .padding(.horizontal)
                         NavigationLink(destination: AllTicketsView(viewModel: viewModel), isActive: $navigateToAllTickets) {
@@ -49,24 +121,20 @@ struct DashboardView: View {
                         } else if viewModel.tickets.isEmpty {
                             Text("No ToDo tickets today")
                                 .foregroundColor(.gray)
-                                .padding()
+                                .padding(.vertical, 4)
                         } else {
-                            VStack(spacing: 12) {
+                            VStack(spacing: 8) {
                                 ForEach(viewModel.tickets.prefix(3)) { ticket in
                                     NavigationLink(destination: TicketDetailView(ticketId: ticket.ticket_id)) {
                                         TicketCard(
                                             ticket: ticket,
-                                            onAssign: {
-                                                // Add your "Assign to Me" logic here if needed
-                                            },
+                                            onAssign: { /* Logic */ },
                                             onSetArrival: {
                                                 viewModel.selectedTicket = ticket
                                                 viewModel.arrivalDate = Date()
                                                 viewModel.showArrivalSheet = true
                                             },
-                                            onStartWork: {
-                                                viewModel.startWork(ticket: ticket)
-                                            },
+                                            onStartWork: { viewModel.startWork(ticket: ticket) },
                                             onServiceUpdate: {
                                                 viewModel.selectedTicket = ticket
                                                 viewModel.showServiceUpdateSheet = true
@@ -139,7 +207,6 @@ struct ArrivalDateSheet: View {
                 .datePickerStyle(GraphicalDatePickerStyle())
                 .labelsHidden()
 
-            // ✅ Show Reason TextField ONLY if there is already an arrival date
             if let existingDate = viewModel.selectedTicket?.employee_arrival_date,
                !existingDate.isEmpty
             {
@@ -152,7 +219,8 @@ struct ArrivalDateSheet: View {
                 Button("Cancel") { viewModel.showArrivalSheet = false }
                     .buttonStyle(ActionButtonStyle(color: .gray))
                 Button("Save") { viewModel.updateArrivalDate() }
-                    .buttonStyle(ActionButtonStyle(color: .teal))
+                    .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
+                    ))
             }
         }
         .padding()
@@ -196,7 +264,8 @@ struct ServiceUpdateSheet: View {
                 Button("Save") {
                     viewModel.handleServiceUpdate()
                 }
-                .buttonStyle(ActionButtonStyle(color: .teal))
+                .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
+                ))
             }
         }
         .padding()
@@ -231,7 +300,8 @@ struct EditTicketSheet: View {
                 Button("Cancel") { viewModel.showEditSheet = false }
                     .buttonStyle(ActionButtonStyle(color: .gray))
                 Button("Save") { viewModel.updateTicketStatus() }
-                    .buttonStyle(ActionButtonStyle(color: .teal))
+                    .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
+                    ))
                     .disabled(viewModel.editStatus.isEmpty || ((viewModel.editStatus == "On Hold" || viewModel.editStatus == "Pending") && viewModel.editReason.isEmpty))
             }
         }
@@ -266,6 +336,10 @@ struct StatusCard: View {
         .frame(maxWidth: .infinity, minHeight: 100)
         .background(color.opacity(0.2))
         .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 
@@ -280,7 +354,7 @@ struct TicketCard: View {
     var onEdit: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) { // Set spacing to 0 for tight layout
             // 🔹 Header
             HStack {
                 Text(ticket.ticket_service_id ?? "Ticket #\(ticket.ticket_id)")
@@ -289,76 +363,74 @@ struct TicketCard: View {
                 Spacer()
                 Text(ticket.status_name)
                     .font(.caption)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8) // Reduced horizontal padding
+                    .padding(.vertical, 2) // Reduced vertical padding
                     .background(statusColor(ticket.status_name))
-                    .cornerRadius(10)
+                    .cornerRadius(8)
                     .foregroundColor(.white)
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.vertical, 4) // Reduced vertical padding
             .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
             .cornerRadius(12, corners: [.topLeft, .topRight])
 
             // 🔹 Body
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 6) { // reduced spacing between text elements
                 Text(ticket.title)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.black)
-                    .bold()
+
                 Text(ticket.description)
-                    .font(.system(size: 13))
+                    .font(.system(size: 12))
                     .foregroundColor(.black)
                     .multilineTextAlignment(.leading)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+
                 HStack {
                     HStack {
                         Text("Category:")
+                            .font(.system(size: 12))
                         Text(ticket.category_name)
                             .bold()
-                            .foregroundColor(.teal)
+                            .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
+                            )
+                            .font(.system(size: 12))
                     }
                     Spacer()
                     HStack {
-                        Text("Region:")
+                        Text("Location:")
+                            .font(.system(size: 12))
                         Text(ticket.region_name)
                             .bold()
-                            .foregroundColor(.teal)
+                            .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
+                            )
+                            .font(.system(size: 12))
                     }
                 }
                 .font(.subheadline)
 
-                Divider()
-
-                let arrivalDateText: String = {
-                    if let raw = ticket.employee_arrival_date {
-                        return raw.split(separator: "T").first.map(String.init) ?? "N/A"
-                    }
-                    return "N/A"
-                }()
+                Divider().padding(.vertical, 2) // Less padding for tighter layout
 
                 HStack {
+                    // Customer Info on the left
                     Label("Customer: \(ticket.customer_name)", systemImage: "person")
                         .font(.caption)
-                    Spacer()
-                }
-                .foregroundColor(.gray)
+                        .foregroundColor(.gray)
 
-                // 🔹 Status-based Actions
-                HStack {
+                    Spacer() // Pushes buttons to the right
+
+                    // Status-based Actions on the right
                     if ticket.status_id == 1 {
                         Button("Assign to Me") { onAssign?() }
-                            .buttonStyle(ActionButtonStyle(color: .teal))
+                            .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)))
                     } else if ticket.status_id == 2 {
-                        // Added Arrival Date button logic here
                         Button("Arrival Date") { onSetArrival?() }
                             .buttonStyle(ActionButtonStyle(color: .orange))
                         if let arrivalDate = ticket.employee_arrival_date, !arrivalDate.isEmpty {
                             Button("Start") { onStartWork?() }
                                 .buttonStyle(ActionButtonStyle(color: .blue))
                         }
-
                     } else if ticket.status_id == 3 {
                         Button("Service Update") { onServiceUpdate?() }
                             .buttonStyle(ActionButtonStyle(color: .purple))
@@ -366,12 +438,17 @@ struct TicketCard: View {
                             .buttonStyle(ActionButtonStyle(color: .pink))
                     }
                 }
-                .padding(.top, 8)
+                .padding(.top, 4)
             }
-            .padding()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
         }
         .background(Color.white)
         .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
 

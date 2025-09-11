@@ -32,6 +32,8 @@ struct LocalTicket: Codable, Identifiable {
     let customer_type: String?
     let customer_division: String?
     let title: String
+    let employee_arrival_date: String?
+    let status_id: Int
 }
 
 final class PhotoAlbumManager {
@@ -150,9 +152,11 @@ final class CoreDataManager {
         cdTicket.cityName = ticket.city_name
         cdTicket.addressType = ticket.address_type
         cdTicket.title = ticket.title
+        cdTicket.employeeArrivalDate = ticket.employee_arrival_date
         cdTicket.multimediaData = try? JSONEncoder().encode(ticket.multimedia)
         cdTicket.statusTrackerData = ticket.status_tracker?.data(using: .utf8)
         cdTicket.customerCommentsData = ticket.customer_comments?.data(using: .utf8)
+        cdTicket.status_id = Int64(ticket.status_id)
         // cdTicket.customerCommentsData = try? JSONEncoder().encode(ticket.customer_comments)
         try? context.save()
     }
@@ -185,7 +189,9 @@ final class CoreDataManager {
             status_tracker: cdTicket.statusTrackerData.flatMap { String(data: $0, encoding: .utf8) },
             customer_comments: cdTicket.customerCommentsData.flatMap { String(data: $0, encoding: .utf8) },
             customer_type: nil,
-            customer_division: nil
+            customer_division: nil,
+            employee_arrival_date: cdTicket.employeeArrivalDate ?? "",
+            status_id: Int(Int64(cdTicket.status_id))
         )
     }
 
@@ -265,7 +271,7 @@ extension Notification.Name {
 }
 
 struct TicketDetailResponse: Decodable {
-    let list: TicketDetail
+    let list: TicketDetail?
 }
 
 struct Multimedia: Codable {
@@ -273,7 +279,7 @@ struct Multimedia: Codable {
     let file_type: String
     let file_path: String
     let multimedia_id: Int
-    let media_stage: String
+    let media_stage: String?
     let uploaded_by: Int
     let longitude: String
     let latitude: String
@@ -301,18 +307,20 @@ struct TicketDetail: Codable {
     let customer_comments: String?
     let customer_type: String?
     let customer_division: String?
-
+    let employee_arrival_date: String
     var employee_pre_uploads: [Multimedia] {
-        multimedia?.filter { $0.media_stage.lowercased() == "pre" } ?? []
+        multimedia?.filter { ($0.media_stage ?? "").lowercased() == "pre" } ?? []
     }
 
     var employee_post_uploads: [Multimedia] {
-        multimedia?.filter { $0.media_stage.lowercased() == "post" } ?? []
+        multimedia?.filter { ($0.media_stage ?? "").lowercased() == "post" } ?? []
     }
 
     var customer_uploads: [Multimedia] {
-        multimedia ?? []
+        multimedia?.filter { ($0.media_stage ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? []
     }
+
+    let status_id: Int
 }
 
 struct StatusTracker: Decodable {
@@ -386,34 +394,83 @@ class TicketDetailViewModel: ObservableObject {
                 .map(\.data)
                 .decode(type: TicketDetailResponse.self, decoder: JSONDecoder())
                 .receive(on: DispatchQueue.main)
-                .sink(receiveCompletion: { _ in
+                .sink(receiveCompletion: { completion in
                     self.isLoading = false
+                    if case let .failure(error) = completion {
+                        self.loadTicketFromCache(ticketId: ticketId)
+                    }
                 }) { [weak self] response in
                     guard let self = self else { return }
-                    self.ticket = response.list
-                    CoreDataManager.shared.save(ticket: response.list)
-                    if let json = response.list.status_tracker?.data(using: .utf8) {
-                        self.history = (try? JSONDecoder().decode([StatusTracker].self, from: json)) ?? []
+
+                    guard let ticket = response.list else {
+                        self.loadTicketFromCache(ticketId: ticketId)
+                        self.isLoading = false
+                        return
                     }
-                    if let json = response.list.customer_comments?.data(using: .utf8) {
-                        let wrapper = (try? JSONDecoder().decode([CustomerCommentWrapper].self, from: json)) ?? []
+
+                    self.ticket = ticket
+
+                    CoreDataManager.shared.save(ticket: ticket)
+
+                    // Decode status tracker JSON
+                    if let jsonData = ticket.status_tracker?.data(using: .utf8) {
+                        self.history = (try? JSONDecoder().decode([StatusTracker].self, from: jsonData)) ?? []
+                    } else {
+                        self.history = []
+                    }
+
+                    // Decode customer comments JSON
+                    if let jsonData = ticket.customer_comments?.data(using: .utf8) {
+                        let wrapper = (try? JSONDecoder().decode([CustomerCommentWrapper].self, from: jsonData)) ?? []
                         self.chatMessages = wrapper.map { $0.message }
+                    } else {
+                        self.chatMessages = []
                     }
+
+                    // Optional: Pretty print JSON for debugging
+                    do {
+                        let encoder = JSONEncoder()
+                        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                        let jsonData = try encoder.encode(ticket)
+
+                    } catch {}
+
+                    self.isLoading = false
                 }
                 .store(in: &cancellables)
+
         } else {
-            ticket = CoreDataManager.shared.load(ticketId: ticketId)
-            if let cached = ticket {
-                if let json = cached.status_tracker?.data(using: .utf8) {
-                    history = (try? JSONDecoder().decode([StatusTracker].self, from: json)) ?? []
-                }
-                if let json = cached.customer_comments?.data(using: .utf8) {
-                    let wrapper = (try? JSONDecoder().decode([CustomerCommentWrapper].self, from: json)) ?? []
-                    chatMessages = wrapper.map { $0.message }
-                }
-            }
-            isLoading = false
+            // Offline mode → load from local Core Data
+            loadTicketFromCache(ticketId: ticketId)
         }
+    }
+
+    // Helper to load from Core Data and decode history & comments
+    private func loadTicketFromCache(ticketId: Int) {
+        guard let cached = CoreDataManager.shared.load(ticketId: ticketId) else {
+            ticket = nil
+            history = []
+            chatMessages = []
+            return
+        }
+
+        ticket = cached
+
+        if let jsonData = cached.status_tracker?.data(using: .utf8) {
+            history = (try? JSONDecoder().decode([StatusTracker].self, from: jsonData)) ?? []
+        } else {
+            history = []
+        }
+
+        if let jsonData = cached.customer_comments?.data(using: .utf8) {
+            let wrapper = (try? JSONDecoder().decode([CustomerCommentWrapper].self, from: jsonData)) ?? []
+            chatMessages = wrapper.map { $0.message }
+        } else {
+            chatMessages = []
+        }
+
+        print("📦 Loaded ticket \(ticketId) from CoreData with \(cached.multimedia?.count ?? 0) media items")
+        isLoading = false
     }
 
     func uploadImage(_ image: UIImage, type: String, completion: @escaping () -> Void) {
@@ -578,7 +635,6 @@ class TicketDetailViewModel: ObservableObject {
     func retryPendingUploads() {
         let items = UploadStore.shared.getAll()
             .filter { $0.syncStatus == .pending || $0.syncStatus == .failed }
-        print("📌 Retry pending uploads: \(items.count) items found")
 
         for upload in items {
             // Fetch PHAsset instead of treating path as file
@@ -714,6 +770,11 @@ struct TicketDetailView: View {
     @State private var pickedImage: UIImage?
     @State private var showImagePicker = false
     @State private var newMessage: String = ""
+    @State private var showArrivalSheet = false
+    @State private var arrivalDate = Date()
+    @State private var arrivalReason = ""
+    @State private var selectedTicketForArrival: Ticket? = nil
+
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
@@ -723,105 +784,13 @@ struct TicketDetailView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 16) {
                             // Header
-                            VStack(spacing: 4) {
-                                HStack {
-                                    Text(ticket.title).font(.headline).foregroundColor(.white)
-                                    Spacer()
-                                    Text(ticket.status_name)
-                                        .font(.caption)
-                                        .padding(.horizontal, 10).padding(.vertical, 4)
-                                        .background(statusColor(ticket.status_name)).cornerRadius(10).foregroundColor(.white)
-                                }
-                            }
-                            .padding()
-                            .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
-                            .ignoresSafeArea(edges: .top)
-
+                            TicketHeader(ticket: ticket)
                             // Ticket Info
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("#\(ticket.ticket_service_id)").font(.subheadline).fontWeight(.semibold)
-                                Text(ticket.description).font(.body).foregroundColor(.gray)
-                            }.padding(.horizontal)
-
+                            TicketInfo(ticket: ticket)
                             // Customer Info with clickable map address
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Label(
-                                        "\(ticket.customer_type == "customer" ? "Customer" : "Company"): \(ticket.customer_name ?? "")",
-                                        systemImage: "person"
-                                    )
-
-                                    .font(.subheadline)
-                                    Button("Details") { showCustomerDetails = true }
-                                        .font(.caption).foregroundColor(.blue)
-                                    Spacer()
-                                }
-                                HStack {
-                                    Image(systemName: "flag.fill").foregroundColor(.gray)
-                                    Text("Priority: ").font(.subheadline)
-                                    Text(ticket.priority_rank ?? "NA").font(.subheadline).foregroundColor(.red)
-                                    Spacer()
-                                }
-                                HStack {
-                                    Image(systemName: "checkmark.seal.fill").foregroundColor(.gray)
-                                    Text("Category: ").font(.subheadline)
-                                    Text(ticket.category_name)
-                                        .font(.subheadline).fontWeight(.bold)
-                                        .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
-                                    Spacer()
-                                }
-                                HStack {
-                                    Label("Created on : \(ticket.created_at.split(separator: "T").first ?? "")", systemImage: "calendar")
-                                    Spacer()
-                                }
-                                // Address clickable
-                                HStack {
-                                    Image(systemName: "map.fill")
-                                    Text("View Location on Google Maps").foregroundColor(.blue)
-                                        .onTapGesture {
-                                            let fullAddress = "\(ticket.address), \(ticket.city_name ?? ""), \(ticket.state_name ?? ""), \(ticket.region_name)"
-                                            openInMaps(address: fullAddress)
-                                        }
-                                    Spacer()
-                                    HStack {
-                                        Text("Region: ").font(.subheadline)
-                                        Text(ticket.region_name)
-                                            .font(.subheadline).fontWeight(.bold)
-                                            .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
-                                        Spacer()
-                                    }
-                                }
-                            }
-                            .padding()
-                            .background(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.3)))
-                            .padding(.horizontal)
-                            .sheet(isPresented: $showCustomerDetails) {
-                                VStack(alignment: .leading, spacing: 16) {
-                                    HStack {
-                                        Text(ticket.customer_type?.lowercased() == "company" ? "Company Details" : "Customer Details")
-                                            .font(.headline)
-                                        Spacer()
-                                        Button("Close") { showCustomerDetails = false }
-                                    }
-                                    Divider()
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Name: \(ticket.customer_name)")
-                                        Text("Email: \(ticket.customer_email ?? "N/A")")
-                                        Text("Phone: \(ticket.customer_phone)")
-                                        if ticket.customer_type?.lowercased() == "company" {
-                                            Text("Division: \(ticket.customer_division ?? "N/A")")
-                                        }
-                                        Text("State: \(ticket.state_name ?? "N/A")")
-                                        Text("City: \(ticket.city_name ?? "N/A")")
-                                        Text("Region: \(ticket.region_name)")
-                                        Text("Address Type: \(ticket.address_type ?? "N/A")")
-                                        Text("Address: \(ticket.address)")
-                                    }
-                                    .font(.subheadline)
-                                    Spacer()
-                                }
-                                .padding()
-                            }
+                            CustomerInfoView(ticket: ticket,
+                                             showCustomerDetails: $showCustomerDetails,
+                                             openInMaps: openInMaps)
 
                             // Customer Uploads
                             SectionHeader(title: "Customer Uploads")
@@ -947,6 +916,215 @@ struct TicketDetailView: View {
     }
 }
 
+struct TicketActionButtons: View {
+    let ticket: TicketDetail
+    var body: some View {
+        HStack(spacing: 12) {
+            if ticket.status_id == 1 {
+                Button("Assign to Me") {
+                    // Handle Assign action here
+                }
+                .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)))
+            } else if ticket.status_id == 2 {
+                Button("Arrival Date") {}
+
+                    .buttonStyle(ActionButtonStyle(color: .orange))
+
+                if !ticket.employee_arrival_date.isEmpty {
+                    Button("Start") {
+                        // Handle Start action here
+                    }
+                    .buttonStyle(ActionButtonStyle(color: .blue))
+                }
+            } else if ticket.status_id == 3 {
+                Button("Service Update") {
+                    // Handle Service Update action here
+                }
+                .buttonStyle(ActionButtonStyle(color: .purple))
+
+                Button("Edit") {
+                    // Handle Edit action here
+                }
+                .buttonStyle(ActionButtonStyle(color: .pink))
+            }
+            Spacer() // Push buttons to the left
+        }
+    }
+}
+
+struct TicketHeader: View {
+    let ticket: TicketDetail
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text(ticket.title).font(.headline).foregroundColor(.white)
+                Spacer()
+                Text(ticket.status_name)
+                    .font(.caption)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(statusColor(ticket.status_name)).cornerRadius(10).foregroundColor(.white)
+            }
+        }
+        .padding()
+        .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
+        .ignoresSafeArea(edges: .top)
+    }
+}
+
+struct TicketInfo: View {
+    let ticket: TicketDetail
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("#\(ticket.ticket_service_id)").font(.subheadline).fontWeight(.semibold)
+            Text(ticket.description).font(.body).foregroundColor(.gray)
+        }.padding(.horizontal)
+    }
+}
+
+struct CustomerInfoView: View {
+    let ticket: TicketDetail
+    @Binding var showCustomerDetails: Bool
+    var openInMaps: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Customer / Company
+            HStack(alignment: .top) {
+                Image(systemName: "person")
+                    .foregroundColor(.gray)
+                    .frame(width: 24) // fixed width for alignment
+                Text("Customer")
+                    .font(.subheadline)
+                    .frame(width: 80, alignment: .leading) // fixed width for labels
+                Text(" : \(ticket.customer_name ?? "")")
+                    .font(.subheadline)
+                Spacer()
+                Button("Details") { showCustomerDetails = true }
+                    .font(.caption)
+                    .foregroundColor(.blue)
+            }
+
+            // Priority
+            HStack {
+                Image(systemName: "flag.fill")
+                    .foregroundColor(.gray)
+                    .frame(width: 24)
+                Text("Priority")
+                    .font(.subheadline)
+                    .frame(width: 80, alignment: .leading)
+                Text(": \(ticket.priority_rank ?? "NA")")
+                    .font(.subheadline)
+                    .foregroundColor(.red)
+                Spacer()
+            }
+
+            // Category
+            HStack {
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundColor(.gray)
+                    .frame(width: 24)
+                Text("Category")
+                    .font(.subheadline)
+                    .frame(width: 80, alignment: .leading)
+                Text(" : \(ticket.category_name)")
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
+                Spacer()
+            }
+
+            // Created on
+            HStack {
+                Image(systemName: "calendar")
+                    .foregroundColor(.gray)
+                    .frame(width: 24)
+
+                Text("Created")
+                    .font(.subheadline)
+                    .frame(width: 80, alignment: .leading)
+
+                Text(": \(ticket.created_at.split(separator: "T").first ?? "")")
+                    .font(.subheadline)
+
+                Spacer()
+            }
+
+            // Location
+            HStack(alignment: .top) {
+                Image(systemName: "map.fill")
+                    .foregroundColor(.gray)
+                    .frame(width: 24)
+                Text("Location")
+                    .font(.subheadline)
+                    .frame(width: 80, alignment: .leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(" : \(ticket.region_name)")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
+                    Text("View on Google Maps")
+                        .foregroundColor(.blue)
+                        .font(.caption)
+                        .onTapGesture {
+                            let fullAddress = "\(ticket.address), \(ticket.city_name ?? ""), \(ticket.state_name ?? ""), \(ticket.region_name)"
+                            openInMaps(fullAddress)
+                        }
+                }
+                Spacer()
+            }
+            TicketActionButtons(
+                ticket: ticket,
+                showArrivalSheet: $showArrivalSheet,
+                selectedTicket: $selectedTicket,
+                arrivalDate: $arrivalDate,
+                arrivalReason: $arrivalReason
+            )
+        }
+        .padding()
+        .background(Color.white)
+        .cornerRadius(10)
+        .shadow(color: Color.gray.opacity(0.2), radius: 4, x: 0, y: 2)
+        .sheet(isPresented: $showCustomerDetails) {
+            VStack(alignment: .leading, spacing: 16) {
+                // Header with title and Close button
+                HStack {
+                    Text(ticket.customer_type?.lowercased() == "company" ? "Company Details" : "Customer Details")
+                        .font(.headline)
+                    Spacer()
+                    Button("Close") { showCustomerDetails = false }
+                }
+                Divider()
+
+                // Details Section
+                TicketDetailSection(ticket: ticket)
+                    .font(.subheadline)
+                Spacer()
+            }
+            .padding()
+        }
+    }
+}
+
+struct TicketDetailSection: View {
+    let ticket: TicketDetail
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            DetailRow(label: "Name", value: ticket.customer_name)
+            DetailRow(label: "Email", value: ticket.customer_email ?? "N/A")
+            DetailRow(label: "Phone", value: ticket.customer_phone)
+            if ticket.customer_type?.lowercased() == "company" {
+                DetailRow(label: "Division", value: ticket.customer_division ?? "N/A")
+            }
+            DetailRow(label: "State", value: ticket.state_name ?? "N/A")
+            DetailRow(label: "City", value: ticket.city_name ?? "N/A")
+            DetailRow(label: "Region", value: ticket.region_name)
+            DetailRow(label: "Address Type", value: ticket.address_type ?? "N/A")
+            DetailRow(label: "Address", value: ticket.address)
+        }
+    }
+}
+
 // MARK: - Helper Views and Functions
 
 func statusColor(_ status: String) -> Color {
@@ -957,6 +1135,21 @@ func statusColor(_ status: String) -> Color {
     case "pending", "open": return .purple
     case "done", "completed": return .green
     default: return .gray
+    }
+}
+
+struct DetailRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .fontWeight(.semibold)
+                .frame(width: 100, alignment: .leading)
+            Text(":  \(value)")
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
