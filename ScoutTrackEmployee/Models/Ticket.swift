@@ -18,6 +18,8 @@ struct Ticket: Identifiable, Codable {
     let priority_rank: String?
     let status_tracker: String?
     let title: String
+    let employee_arrival_time: String?
+    
 }
 
 struct TicketListResponse: Decodable {

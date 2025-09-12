@@ -73,7 +73,7 @@ struct AllTicketsView: View {
             EditTicketSheet(viewModel: viewModel)
         }
         .onAppear {
-            viewModel.fetchTickets()
+            viewModel.fetchAllTickets()
         }
     }
 }

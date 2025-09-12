@@ -52,7 +52,128 @@ class DashboardViewModel: ObservableObject {
 
     // MARK: - Fetch Tickets (API + Core Data)
 
-    func fetchTickets() {
+    func fetchTickets(onlyToday: Bool = false) {
+        guard let url = URL(string: "\(baseURL)/api/tickets/employee/\(userId)") else {
+            return
+        }
+
+        isLoading = true
+        print("📡 Fetching tickets for userId:", userId, "Only today:", onlyToday)
+
+        URLSession.shared.dataTaskPublisher(for: url)
+            .map { $0.data }
+            .decode(type: TicketListResponse.self, decoder: JSONDecoder())
+            .map { response -> [Ticket] in
+                let isoFormatter = ISO8601DateFormatter()
+                isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+                let isoFormatterNoMillis = ISO8601DateFormatter()
+                isoFormatterNoMillis.formatOptions = [.withInternetDateTime]
+
+                func parseDate(_ dateString: String?) -> Date? {
+                    guard let str = dateString else { return nil }
+                    return isoFormatter.date(from: str) ?? isoFormatterNoMillis.date(from: str)
+                }
+
+                let allTickets = response.list
+                let today = Calendar.current.startOfDay(for: Date())
+                let now = Date()
+
+                // Step 1: Apply onlyToday filter
+                var filteredTickets = allTickets
+                if onlyToday {
+                    filteredTickets = allTickets.filter { ticket in
+                        if let arrivalDate = parseDate(ticket.employee_arrival_date) {
+                            return Calendar.current.isDate(arrivalDate, inSameDayAs: today)
+                        }
+                        return false
+                    }
+                }
+
+                // Step 2: Remove tickets if time passed AND status_id != 2
+                filteredTickets = filteredTickets.filter { ticket in
+                    if let arrivalDate = parseDate(ticket.employee_arrival_date) {
+                        if arrivalDate < now && ticket.status_id != 2 {
+                            return false // remove it
+                        }
+                    }
+                    return true
+                }
+
+                // Step 3: Sort tickets
+                return filteredTickets.sorted { t1, t2 in
+                    let date1 = parseDate(t1.employee_arrival_date)
+                    let date2 = parseDate(t2.employee_arrival_date)
+
+                    // Case 1: Both have dates → sort by date
+                    if let d1 = date1, let d2 = date2 {
+                        return d1 < d2
+                    }
+
+                    // Case 2: One has date → date comes first
+                    if let _ = date1, date2 == nil { return true }
+                    if date1 == nil, let _ = date2 { return false }
+
+                    // Case 3: Both missing dates → Only status_id == 2 tickets sorted by urgency
+                    if t1.status_id == 2 && t2.status_id == 2 {
+                        return (t1.urgency ?? Int.max) < (t2.urgency ?? Int.max)
+                    }
+
+                    // Case 4: status_id == 2 comes before others with no date
+                    if t1.status_id == 2 && t2.status_id != 2 { return true }
+                    if t1.status_id != 2 && t2.status_id == 2 { return false }
+
+                    // Case 5: Otherwise → keep same order
+                    return false
+                }
+            }
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { [weak self] completion in
+                if case let .failure(error) = completion {
+                    print("❌ Fetch tickets failed:", error)
+                    self?.loadOfflineTickets()
+                    self?.isLoading = false
+                }
+            }, receiveValue: { [weak self] (tickets: [Ticket]) in
+                print("✅ Tickets fetched:", tickets.count)
+
+                var dayWiseToDo: [String: Int] = [:]
+
+                for ticket in tickets {
+                    guard let trackerStr = ticket.status_tracker,
+                          let data = trackerStr.data(using: .utf8),
+                          let trackerArrayAny = try? JSONSerialization.jsonObject(with: data),
+                          let trackerArray = trackerArrayAny as? [[String: Any]]
+                    else { continue }
+
+                    if let todoEntry = trackerArray.first(where: {
+                        ($0["status"] as? String)?.lowercased() == "todo" || ($0["status"] as? String)?.lowercased() == "to do"
+                    }) {
+                        if let dateStr = (todoEntry["timestamp"] as? String) ?? (todoEntry["Date"] as? String) {
+                            let isoFormatter = ISO8601DateFormatter()
+                            let dateFormatter = DateFormatter()
+                            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+                            dateFormatter.dateFormat = "MMM dd, yyyy, hh:mm a"
+
+                            if let date = isoFormatter.date(from: dateStr) ?? dateFormatter.date(from: dateStr) {
+                                let dayKey = DateFormatter.shortDate.string(from: date)
+                                dayWiseToDo[dayKey, default: 0] += 1
+                            }
+                        }
+                    }
+                }
+
+                let todayKey = DateFormatter.shortDate.string(from: Date())
+                self?.tickets = tickets
+                self?.todoCount = dayWiseToDo[todayKey] ?? 0
+                self?.weeklyToDoCounts = dayWiseToDo
+                self?.isLoading = false
+                self?.saveTicketsOffline(tickets)
+            })
+            .store(in: &cancellables)
+    }
+
+    func fetchAllTickets() {
         guard let url = URL(string: "\(baseURL)/api/tickets/employee/\(userId)") else {
             print("❌ Invalid URL")
             return
@@ -350,6 +471,7 @@ class DashboardViewModel: ObservableObject {
 
     // MARK: - Edit Status
 
+
     func updateTicketStatus() {
         guard let ticket = selectedTicket else { return }
 
@@ -408,11 +530,9 @@ class DashboardViewModel: ObservableObject {
     // MARK: - Helper: format for MySQL DATETIME (no Z, no millis)
 
     private static func mysqlDateTimeNoZ(from date: Date) -> String {
-        // If your server expects local time, set to .current
-        // If your server expects UTC (but still without Z), use GMT.
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
-        df.timeZone = TimeZone(secondsFromGMT: 0) // UTC, NO Z
+        df.timeZone = .current // ✅ Use local timezone, not UTC
         df.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
         return df.string(from: date)
     }

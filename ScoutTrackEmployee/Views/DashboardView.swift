@@ -177,7 +177,7 @@ struct DashboardView: View {
             .edgesIgnoringSafeArea(.bottom)
             .navigationBarBackButtonHidden(true)
             .onAppear {
-                viewModel.fetchTickets()
+                viewModel.fetchTickets(onlyToday: true)
                 viewModel.fetchAllStatusCounts()
             }
             // 🔹 Arrival Date Sheet Integration
@@ -191,6 +191,26 @@ struct DashboardView: View {
                 EditTicketSheet(viewModel: viewModel)
             }
         }
+    }
+}
+
+struct BlinkingText: View {
+    let text: String
+    @State private var isVisible = true
+
+    var body: some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundColor(.white)
+            .opacity(isVisible ? 1 : 0) // Blink by changing opacity
+            .onAppear {
+                withAnimation(
+                    Animation.easeInOut(duration: 0.6)
+                        .repeatForever(autoreverses: true)
+                ) {
+                    isVisible.toggle()
+                }
+            }
     }
 }
 
@@ -360,7 +380,11 @@ struct TicketCard: View {
                 Text(ticket.ticket_service_id ?? "Ticket #\(ticket.ticket_id)")
                     .font(.caption)
                     .foregroundColor(.white)
+
                 Spacer()
+                BlinkingText(text: formatTime(ticket.employee_arrival_time))
+                    .foregroundColor(.white)
+                    .font(.system(size: 12))
                 Text(ticket.status_name)
                     .font(.caption)
                     .padding(.horizontal, 8) // Reduced horizontal padding
@@ -450,6 +474,23 @@ struct TicketCard: View {
                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+
+    private func formatTime(_ timeString: String?) -> String {
+        guard let timeString = timeString else { return "" }
+
+        let inputFormatter = DateFormatter()
+        inputFormatter.dateFormat = "HH:mm:ss"
+        inputFormatter.locale = Locale(identifier: "en_US_POSIX")
+
+        let outputFormatter = DateFormatter()
+        outputFormatter.dateFormat = "h:mm a"
+        outputFormatter.locale = Locale(identifier: "en_US_POSIX")
+
+        if let date = inputFormatter.date(from: timeString) {
+            return outputFormatter.string(from: date)
+        }
+        return timeString
     }
 
     func statusColor(_ status: String) -> Color {

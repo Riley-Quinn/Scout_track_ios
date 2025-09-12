@@ -762,6 +762,7 @@ struct ImagePicker: UIViewControllerRepresentable {
 struct TicketDetailView: View {
     let ticketId: Int
     @StateObject private var viewModel = TicketDetailViewModel()
+    @StateObject private var viewModelticket = DashboardViewModel()
     @State private var showCustomerDetails = false
     @State private var isUploading = false
     @State private var showUploadDialog = false
@@ -783,14 +784,14 @@ struct TicketDetailView: View {
                 } else if let ticket = viewModel.ticket {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 16) {
-                            // Header
                             TicketHeader(ticket: ticket)
                             // Ticket Info
                             TicketInfo(ticket: ticket)
                             // Customer Info with clickable map address
                             CustomerInfoView(ticket: ticket,
                                              showCustomerDetails: $showCustomerDetails,
-                                             openInMaps: openInMaps)
+                                             openInMaps: openInMaps,
+                                             viewModelticket: viewModelticket)
 
                             // Customer Uploads
                             SectionHeader(title: "Customer Uploads")
@@ -878,7 +879,6 @@ struct TicketDetailView: View {
                 viewModel.fetchTicketDetail(ticketId: ticketId)
                 viewModel.retryPendingUploads()
             }
-
             .confirmationDialog("Choose Upload Option", isPresented: $showUploadDialog) {
                 Button("Camera") {
                     isCamera = true
@@ -895,29 +895,157 @@ struct TicketDetailView: View {
             }
             .onChange(of: pickedImage) { newImage in
                 if let img = newImage, let type = uploadType {
-                    // Call new version — no need to pass ticketId
                     viewModel.uploadImage(img, type: type) {
-                        viewModel.fetchTicketDetail(ticketId: ticketId) // refresh
+                        viewModel.fetchTicketDetail(ticketId: ticketId)
                     }
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .syncStatusChanged)) { _ in
                 viewModel.refreshFlag.toggle()
             }
+
+            // This is inside the ZStack now
+            if viewModel.isUploading {
+                Color.black.opacity(0.3).ignoresSafeArea()
+                ProgressView("Uploading...")
+                    .padding()
+                    .background(Color.white)
+                    .cornerRadius(10)
+                    .shadow(radius: 10)
+            }
         }
-        if viewModel.isUploading {
-            Color.black.opacity(0.3).ignoresSafeArea()
-            ProgressView("Uploading...")
-                .padding()
-                .background(Color.white)
-                .cornerRadius(10)
-                .shadow(radius: 10)
+        // Both sheets stay attached to ZStack root
+        .sheet(isPresented: $viewModelticket.showArrivalSheet) {
+            ArrivalDateSheetTicket(viewModel: viewModelticket)
         }
+        .sheet(isPresented: $viewModelticket.showServiceUpdateSheet) {
+            ServiceUpdateSheetTicket(viewModel: viewModelticket)
+        }
+        .sheet(isPresented: $viewModelticket.showEditSheet) {
+            EditTicketSheetTicket(viewModel: viewModelticket)
+        }
+    }
+}
+
+struct ArrivalDateSheetTicket: View {
+    @ObservedObject var viewModel: DashboardViewModel
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Select Arrival Date & Time")
+                .font(.headline)
+
+            DatePicker("Arrival Date & Time", selection: $viewModel.arrivalDate, displayedComponents: [.date, .hourAndMinute])
+                .datePickerStyle(GraphicalDatePickerStyle())
+                .labelsHidden()
+
+            if let existingDate = viewModel.selectedTicket?.employee_arrival_date,
+               !existingDate.isEmpty
+            {
+                TextField("Reason for Delay (Optional)", text: $viewModel.arrivalReason)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding()
+            }
+
+            HStack {
+                Button("Cancel") { viewModel.showArrivalSheet = false }
+                    .buttonStyle(ActionButtonStyle(color: .gray))
+                Button("Save") { viewModel.updateArrivalDate() }
+                    .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
+                    ))
+            }
+        }
+        .padding()
+    }
+}
+
+struct ServiceUpdateSheetTicket: View {
+    @ObservedObject var viewModel: DashboardViewModel
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Service Update")
+                .font(.headline)
+
+            // Dropdown using Picker
+            Picker("Select Reason", selection: $viewModel.serviceReason) {
+                ForEach(viewModel.serviceReasons, id: \.self) { reason in
+                    Text(reason).tag(reason)
+                }
+            }
+            .pickerStyle(MenuPickerStyle())
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(Color.gray.opacity(0.1))
+            .cornerRadius(8)
+
+            // Custom reason if 'Other' selected
+            if viewModel.serviceReason == "Other" {
+                TextField("Enter custom reason", text: $viewModel.customServiceReason)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding(.horizontal)
+            }
+
+            HStack {
+                Button("Cancel") {
+                    viewModel.showServiceUpdateSheet = false
+                }
+                .buttonStyle(ActionButtonStyle(color: .gray))
+
+                Button("Save") {
+                    viewModel.handleServiceUpdate()
+                }
+                .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
+                ))
+            }
+        }
+        .padding()
+    }
+}
+
+struct EditTicketSheetTicket: View {
+    @ObservedObject var viewModel: DashboardViewModel
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Update Ticket Status")
+                .font(.headline)
+
+            Picker("Select Status", selection: $viewModel.editStatus) {
+                ForEach(viewModel.editStatuses, id: \.self) { status in
+                    Text(status).tag(status)
+                }
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding()
+
+            // Show reason only for On Hold or Pending
+            if viewModel.editStatus == "On Hold" || viewModel.editStatus == "Pending" {
+                TextField("Enter reason", text: $viewModel.editReason)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding(.horizontal)
+            }
+
+            HStack {
+                Button("Cancel") { viewModel.showEditSheet = false }
+                    .buttonStyle(ActionButtonStyle(color: .gray))
+                Button("Save") { viewModel.updateTicketStatus() }
+                    .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
+                    ))
+                    .disabled(viewModel.editStatus.isEmpty || ((viewModel.editStatus == "On Hold" || viewModel.editStatus == "Pending") && viewModel.editReason.isEmpty))
+            }
+        }
+        .padding()
     }
 }
 
 struct TicketActionButtons: View {
     let ticket: TicketDetail
+    @ObservedObject var viewModelticket: DashboardViewModel
+    var onSetArrival: (() -> Void)?
+    var onStartWork: (() -> Void)?
+    var onServiceUpdate: (() -> Void)?
+    var onEdit: (() -> Void)?
     var body: some View {
         HStack(spacing: 12) {
             if ticket.status_id == 1 {
@@ -926,26 +1054,20 @@ struct TicketActionButtons: View {
                 }
                 .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)))
             } else if ticket.status_id == 2 {
-                Button("Arrival Date") {}
+                Button("Arrival Date") { onSetArrival?() }
 
                     .buttonStyle(ActionButtonStyle(color: .orange))
 
                 if !ticket.employee_arrival_date.isEmpty {
-                    Button("Start") {
-                        // Handle Start action here
-                    }
-                    .buttonStyle(ActionButtonStyle(color: .blue))
+                    Button("Start") { onStartWork?() }
+                        .buttonStyle(ActionButtonStyle(color: .blue))
                 }
             } else if ticket.status_id == 3 {
-                Button("Service Update") {
-                    // Handle Service Update action here
-                }
-                .buttonStyle(ActionButtonStyle(color: .purple))
+                Button("Service Update") { onServiceUpdate?() }
+                    .buttonStyle(ActionButtonStyle(color: .purple))
 
-                Button("Edit") {
-                    // Handle Edit action here
-                }
-                .buttonStyle(ActionButtonStyle(color: .pink))
+                Button("Edit") { onEdit?() }
+                    .buttonStyle(ActionButtonStyle(color: .pink))
             }
             Spacer() // Push buttons to the left
         }
@@ -985,7 +1107,7 @@ struct CustomerInfoView: View {
     let ticket: TicketDetail
     @Binding var showCustomerDetails: Bool
     var openInMaps: (String) -> Void
-
+    @ObservedObject var viewModelticket: DashboardViewModel
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Customer / Company
@@ -1073,7 +1195,24 @@ struct CustomerInfoView: View {
                 Spacer()
             }
             TicketActionButtons(
-                ticket: ticket
+                ticket: ticket,
+                viewModelticket: viewModelticket,
+                onSetArrival: {
+                    viewModelticket.selectedTicket = Ticket(from: ticket)
+                    viewModelticket.arrivalDate = Date()
+                    viewModelticket.showArrivalSheet = true
+                },
+                onStartWork: { viewModelticket.selectedTicket = Ticket(from: ticket) },
+                onServiceUpdate: {
+                    viewModelticket.selectedTicket = Ticket(from: ticket)
+                    viewModelticket.showServiceUpdateSheet = true
+                },
+                onEdit: {
+                    viewModelticket.selectedTicket = Ticket(from: ticket)
+                    viewModelticket.editStatus = ""
+                    viewModelticket.editReason = ""
+                    viewModelticket.showEditSheet = true
+                }
             )
         }
         .padding()

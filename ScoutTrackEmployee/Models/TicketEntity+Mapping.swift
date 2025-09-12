@@ -18,7 +18,9 @@ extension TicketEntity {
             urgency: urgency == 0 ? nil : Int(urgency),
             priority_rank: priority_rank,
             status_tracker: status_tracker,
-            title: title ?? ""
+            title: title ?? "",
+            employee_arrival_time: employee_arrival_time ?? ""
+            
         )
     }
 }
@@ -35,7 +37,7 @@ extension Ticket {
         entity.city_name = city_name
         entity.customer_name = customer_name
         entity.created_at = created_at
-        // entity.employee_arrival_date = employee_arrival_date
+        entity.employee_arrival_date = employee_arrival_date
         entity.descriptionText = description
         if let urgency = urgency {
             entity.urgency = Int64(urgency)
@@ -43,6 +45,7 @@ extension Ticket {
         entity.priority_rank = priority_rank
         entity.status_tracker = status_tracker
         entity.title = title
+        entity.employee_arrival_time = employee_arrival_time
         return entity
     }
 }
