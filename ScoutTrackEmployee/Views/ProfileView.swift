@@ -10,6 +10,7 @@ struct ProfileView: View {
     @State private var profile = Profile()
     @State private var userId: String? = nil
     @State private var isLoading = true
+    @State private var navigateToLogin = false // 🔹 New state
 
     var body: some View {
         VStack(spacing: 0) {
@@ -61,6 +62,16 @@ struct ProfileView: View {
                         .cornerRadius(8)
                         .shadow(color: .gray.opacity(0.2), radius: 4, x: 0, y: 2)
                         .padding(.horizontal)
+
+                        // 🔹 Hidden NavigationLink to trigger programmatic navigation
+                        NavigationLink(
+                            destination: LoginView()
+                                .navigationBarBackButtonHidden(true)
+                                .navigationBarHidden(true),
+                            isActive: $navigateToLogin
+                        ) {
+                            EmptyView()
+                        }
                     }
                     .padding(.top, 20)
                 }
@@ -154,7 +165,10 @@ struct ProfileView: View {
 
     func handleLogout() {
         UserDefaults.standard.removeObject(forKey: "userId")
-        // Navigate back to login screen logic here (depends on your app flow)
+        UserDefaults.standard.removeObject(forKey: "name")
+        UserDefaults.standard.removeObject(forKey: "Role")
+        UserDefaults.standard.removeObject(forKey: "client_id")
+        navigateToLogin = true // 🔹 Trigger navigation
     }
 }
 

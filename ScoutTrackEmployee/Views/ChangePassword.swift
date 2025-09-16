@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ChangePasswordView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) var dismiss
 
     @State private var currentPassword = ""
     @State private var newPassword = ""
@@ -19,20 +19,31 @@ struct ChangePasswordView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
-                Button(action: {
-                    presentationMode.wrappedValue.dismiss()
-                }) {
-                    Image(systemName: "chevron.left")
+            ZStack {
+                Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
+                    .ignoresSafeArea(edges: .top)
+
+                HStack {
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(.white)
+                            .font(.title2)
+                            .padding(.leading, 8)
+                    }
+                    Spacer()
+                    Text("Change Password")
+                        .font(.system(size: 22, weight: .bold))
                         .foregroundColor(.white)
+                    Spacer()
                 }
-                Text("Change Password")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                Spacer()
+                .padding(.top, UIApplication.shared.connectedScenes
+                    .compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.top }
+                    .first ?? 20)
+                .padding(.horizontal)
             }
-            .padding()
-            .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
+            .frame(height: 100) // Increased height
 
             ScrollView {
                 VStack(spacing: 20) {
@@ -40,9 +51,10 @@ struct ChangePasswordView: View {
                     Circle()
                         .fill(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
                         .frame(width: 100, height: 100)
-                        .overlay(Image(systemName: "lock.fill")
-                            .font(.system(size: 40))
-                            .foregroundColor(.white)
+                        .overlay(
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 40))
+                                .foregroundColor(.white)
                         )
                         .padding(.top, 30)
 
@@ -110,7 +122,6 @@ struct ChangePasswordView: View {
         errorNew = ""
         errorConfirm = ""
 
-        // Basic validations like in Yup
         if currentPassword.isEmpty {
             errorCurrent = "Current password is required"
         }
@@ -144,12 +155,11 @@ struct ChangePasswordView: View {
         URLSession.shared.dataTask(with: request) { _, response, error in
             DispatchQueue.main.async {
                 isLoading = false
-                if let error = error {
+                if error != nil {
                     return
                 }
                 if let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
-                    // Success
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                 } else {
                     errorCurrent = "Failed to update password. Try again."
                 }
@@ -164,23 +174,33 @@ struct ChangePasswordView: View {
 
     // MARK: - Custom Field
 
-    private func passwordField(title: String, text: Binding<String>, isSecure: Bool, showToggle: Binding<Bool>, errorText: String) -> some View {
+    private func passwordField(
+        title: String,
+        text: Binding<String>,
+        isSecure: Bool,
+        showToggle: Binding<Bool>,
+        errorText: String
+    ) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                if isSecure {
-                    SecureField(title, text: text)
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
-                } else {
-                    TextField(title, text: text)
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
-                }
-                Button(action: { showToggle.wrappedValue.toggle() }) {
-                    Image(systemName: showToggle.wrappedValue ? "eye" : "eye.slash")
-                        .foregroundColor(.gray)
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.black, lineWidth: 1)
+                HStack {
+                    if isSecure {
+                        SecureField(title, text: text)
+                            .padding(.leading, 10)
+                            .padding(.vertical, 12)
+                    } else {
+                        TextField(title, text: text)
+                            .padding(.leading, 10)
+                            .padding(.vertical, 12)
+                    }
+
+                    Button(action: { showToggle.wrappedValue.toggle() }) {
+                        Image(systemName: showToggle.wrappedValue ? "eye" : "eye.slash")
+                            .foregroundColor(.gray)
+                            .padding(.trailing, 10)
+                    }
                 }
             }
             if !errorText.isEmpty {

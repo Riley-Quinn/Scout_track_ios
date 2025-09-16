@@ -776,6 +776,8 @@ struct TicketDetailView: View {
     @State private var arrivalReason = ""
     @State private var selectedTicketForArrival: Ticket? = nil
 
+    @State private var showConfirmUpload = false // 👈 New state
+
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
@@ -794,23 +796,31 @@ struct TicketDetailView: View {
                                              viewModelticket: viewModelticket)
 
                             // Customer Uploads
-                            SectionHeader(title: "Customer Uploads")
-                            UploadsGrid(
-                                serverMedia: ticket.customer_uploads,
-                                localMedia: viewModel.getLocalUploads().filter { $0.mediaStage == nil }
-                            )
+                            if !ticket.customer_uploads.isEmpty || !viewModel.getLocalUploads().filter({ $0.mediaStage == nil }).isEmpty {
+                                SectionHeader(title: "Customer Uploads")
+                                UploadsGrid(
+                                    serverMedia: ticket.customer_uploads,
+                                    localMedia: viewModel.getLocalUploads().filter { $0.mediaStage == nil }
+                                )
+                            } else {
+                                SectionHeader(title: "Customer Uploads")
+                                Text("No Customer Uploads")
+                                    .foregroundColor(.black)
+                                    .padding(.vertical)
+                                    .frame(maxWidth: .infinity)
+                                    .multilineTextAlignment(.center)
+                            }
 
                             // Employee Uploads
                             SectionHeader(title: "Employee Uploads")
                             VStack(alignment: .leading, spacing: 12) {
-                                SectionHeader(title: "Pre Uploads", showPlus: true)
+                                SectionHeader(title: "Issue Evidence", showPlus: true)
                                     .onTapGesture { uploadType = "pre"; showUploadDialog = true }
                                 UploadsGrid(
                                     serverMedia: ticket.employee_pre_uploads,
                                     localMedia: viewModel.getLocalUploads().filter { $0.mediaStage == "pre" }
                                 )
-
-                                SectionHeader(title: "Post Uploads", showPlus: true)
+                                SectionHeader(title: "Resolution Evidence", showPlus: true)
                                     .onTapGesture { uploadType = "post"; showUploadDialog = true }
                                 UploadsGrid(
                                     serverMedia: ticket.employee_post_uploads,
@@ -894,14 +904,56 @@ struct TicketDetailView: View {
                 ImagePicker(sourceType: isCamera ? .camera : .photoLibrary, selectedImage: $pickedImage)
             }
             .onChange(of: pickedImage) { newImage in
-                if let img = newImage, let type = uploadType {
-                    viewModel.uploadImage(img, type: type) {
-                        viewModel.fetchTicketDetail(ticketId: ticketId)
-                    }
+                if newImage != nil {
+                    showConfirmUpload = true // 👈 show confirmation preview instead of auto-upload
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .syncStatusChanged)) { _ in
                 viewModel.refreshFlag.toggle()
+            }
+
+            // Upload confirmation preview
+            if showConfirmUpload, let img = pickedImage, let type = uploadType {
+                VStack {
+                    Spacer()
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 200)
+                        .cornerRadius(8)
+                        .padding()
+
+                    HStack {
+                        Button("Cancel") {
+                            pickedImage = nil
+                            showConfirmUpload = false
+                        }
+                        .padding()
+                        .background(Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+
+                        Button("Upload") {
+                            viewModel.uploadImage(img, type: type) {
+                                viewModel.fetchTicketDetail(ticketId: ticketId)
+                                pickedImage = nil
+                                showConfirmUpload = false
+                            }
+                        }
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                    }
+                    .padding()
+                }
+
+                .background(Color.white)
+                .cornerRadius(16)
+                .shadow(radius: 10)
+                .padding()
+                .frame(maxWidth: 300) // 👈 small fixed width
+                .frame(maxHeight: 350)
             }
 
             // This is inside the ZStack now
@@ -914,48 +966,12 @@ struct TicketDetailView: View {
                     .shadow(radius: 10)
             }
         }
-        // Both sheets stay attached to ZStack root
-        .sheet(isPresented: $viewModelticket.showArrivalSheet) {
-            ArrivalDateSheetTicket(viewModel: viewModelticket)
-        }
         .sheet(isPresented: $viewModelticket.showServiceUpdateSheet) {
             ServiceUpdateSheetTicket(viewModel: viewModelticket)
         }
         .sheet(isPresented: $viewModelticket.showEditSheet) {
             EditTicketSheetTicket(viewModel: viewModelticket)
         }
-    }
-}
-
-struct ArrivalDateSheetTicket: View {
-    @ObservedObject var viewModel: DashboardViewModel
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Select Arrival Date & Time")
-                .font(.headline)
-
-            DatePicker("Arrival Date & Time", selection: $viewModel.arrivalDate, displayedComponents: [.date, .hourAndMinute])
-                .datePickerStyle(GraphicalDatePickerStyle())
-                .labelsHidden()
-
-            if let existingDate = viewModel.selectedTicket?.employee_arrival_date,
-               !existingDate.isEmpty
-            {
-                TextField("Reason for Delay (Optional)", text: $viewModel.arrivalReason)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding()
-            }
-
-            HStack {
-                Button("Cancel") { viewModel.showArrivalSheet = false }
-                    .buttonStyle(ActionButtonStyle(color: .gray))
-                Button("Save") { viewModel.updateArrivalDate() }
-                    .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
-                    ))
-            }
-        }
-        .padding()
     }
 }
 
@@ -1005,6 +1021,7 @@ struct ServiceUpdateSheetTicket: View {
 
 struct EditTicketSheetTicket: View {
     @ObservedObject var viewModel: DashboardViewModel
+    // @State private var showUploadAlert = false // 🔔 State for alert
 
     var body: some View {
         VStack(spacing: 20) {
@@ -1054,10 +1071,6 @@ struct TicketActionButtons: View {
                 }
                 .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)))
             } else if ticket.status_id == 2 {
-                Button("Arrival Date") { onSetArrival?() }
-
-                    .buttonStyle(ActionButtonStyle(color: .orange))
-
                 if !ticket.employee_arrival_date.isEmpty {
                     Button("Start") { onStartWork?() }
                         .buttonStyle(ActionButtonStyle(color: .blue))
@@ -1202,7 +1215,9 @@ struct CustomerInfoView: View {
                     viewModelticket.arrivalDate = Date()
                     viewModelticket.showArrivalSheet = true
                 },
-                onStartWork: { viewModelticket.selectedTicket = Ticket(from: ticket) },
+                onStartWork: {
+                    viewModelticket.startWork(ticket: Ticket(from: ticket))
+                },
                 onServiceUpdate: {
                     viewModelticket.selectedTicket = Ticket(from: ticket)
                     viewModelticket.showServiceUpdateSheet = true
@@ -1297,51 +1312,75 @@ struct UploadsGrid: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 12) {
             // 🔹 Server media
             ForEach(serverMedia, id: \.multimedia_id) { media in
-                RemoteImageView(url: media.file_name)
-                    .frame(width: 100, height: 100)
-                    .cornerRadius(8)
+                VStack {
+                    RemoteImageView(url: media.file_name)
+                        .frame(width: 100, height: 100)
+                        .cornerRadius(8)
+
+                    // Display address under image
+
+                    Text(addresses[media.multimedia_id] ?? "Loading...")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .onAppear {
+                            LocationHelper.shared.getAddress(latitude: media.latitude, longitude: media.longitude) { address in
+                                addresses[media.multimedia_id] = address
+                            }
+                        }
+                }
             }
 
             // 🔹 Local offline uploads
             ForEach(localMedia) { local in
-                ZStack(alignment: .topTrailing) {
-                    if let uiImage = UIImage(contentsOfFile: local.localFilePath) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 100, height: 100)
-                            .clipped()
-                            .cornerRadius(8)
-                    }
+                VStack {
+                    ZStack(alignment: .topTrailing) {
+                        if let uiImage = UIImage(contentsOfFile: local.localFilePath) {
+                            Image(uiImage: uiImage)
 
-                    // 🔹 Status overlay
-                    Group {
-                        if local.syncStatus == .pending {
-                            Image(systemName: "clock.arrow.circlepath")
-                                .foregroundColor(.yellow)
-                        } else if local.syncStatus == .failed {
-                            // Retry button
-                            Button(action: {
-                                UploadStore.shared.retryUpload(local)
-                            }) {
-                                Image(systemName: "arrow.clockwise.circle.fill")
-                                    .foregroundColor(.orange)
-                            }
-                        } else {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 100, height: 100)
+                                .clipped()
+                                .cornerRadius(8)
                         }
-                    }
-                    .padding(6)
-                    .background(Color.black.opacity(0.6))
-                    .clipShape(Circle())
-                }
 
-                Text(local.mediaStage.capitalized)
-                    .font(.caption2)
-                    .foregroundColor(.gray)
+                        // 🔹 Status overlay
+
+                        Group {
+                            if local.syncStatus == .pending {
+                                Image(systemName: "clock.arrow.circlepath")
+
+                                    .foregroundColor(.yellow)
+
+                            } else if local.syncStatus == .failed {
+                                Button(action: { UploadStore.shared.retryUpload(local) }) {
+                                    Image(systemName: "arrow.clockwise.circle.fill")
+
+                                        .foregroundColor(.orange)
+                                }
+
+                            } else {
+                                Image(systemName: "checkmark.circle.fill")
+
+                                    .foregroundColor(.green)
+                            }
+                        }
+
+                        .padding(6)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Circle())
+                    }
+
+                    // Optional: show offline coordinates
+
+                    Text(local.mediaStage.capitalized)
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
             }
         }
+
         .padding(.vertical)
     }
 }

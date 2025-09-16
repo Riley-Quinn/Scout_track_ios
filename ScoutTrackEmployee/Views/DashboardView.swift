@@ -94,11 +94,11 @@ struct DashboardView: View {
                         }
 
                         // Weekly Progress
-                        WeeklyProgressView(
-                            weeklyCounts: viewModel.weeklyToDoCounts,
-                            closedCounts: [:]
-                        )
-                        .frame(maxWidth: .infinity)
+                        // WeeklyProgressView(
+                        //     weeklyCounts: viewModel.weeklyToDoCounts,
+                        //     closedCounts: [:]
+                        // )
+                        // .frame(maxWidth: .infinity)
 
                         // Today Tickets Section
                         HStack {
@@ -180,10 +180,6 @@ struct DashboardView: View {
                 viewModel.fetchTickets(onlyToday: true)
                 viewModel.fetchAllStatusCounts()
             }
-            // 🔹 Arrival Date Sheet Integration
-            .sheet(isPresented: $viewModel.showArrivalSheet) {
-                ArrivalDateSheet(viewModel: viewModel)
-            }
             .sheet(isPresented: $viewModel.showServiceUpdateSheet) {
                 ServiceUpdateSheet(viewModel: viewModel)
             }
@@ -211,39 +207,6 @@ struct BlinkingText: View {
                     isVisible.toggle()
                 }
             }
-    }
-}
-
-// 🔹 Date & Time Picker Sheet
-struct ArrivalDateSheet: View {
-    @ObservedObject var viewModel: DashboardViewModel
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Select Arrival Date & Time")
-                .font(.headline)
-
-            DatePicker("Arrival Date & Time", selection: $viewModel.arrivalDate, displayedComponents: [.date, .hourAndMinute])
-                .datePickerStyle(GraphicalDatePickerStyle())
-                .labelsHidden()
-
-            if let existingDate = viewModel.selectedTicket?.employee_arrival_date,
-               !existingDate.isEmpty
-            {
-                TextField("Reason for Delay (Optional)", text: $viewModel.arrivalReason)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding()
-            }
-
-            HStack {
-                Button("Cancel") { viewModel.showArrivalSheet = false }
-                    .buttonStyle(ActionButtonStyle(color: .gray))
-                Button("Save") { viewModel.updateArrivalDate() }
-                    .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
-                    ))
-            }
-        }
-        .padding()
     }
 }
 
@@ -382,9 +345,16 @@ struct TicketCard: View {
                     .foregroundColor(.white)
 
                 Spacer()
-                BlinkingText(text: formatTime(ticket.employee_arrival_time))
-                    .foregroundColor(.white)
-                    .font(.system(size: 12))
+                if isToday(ticket.employee_arrival_date) && ticket.status_name.lowercased() == "todo" {
+                    BlinkingText(text: formatTime(ticket.employee_arrival_time))
+                        .foregroundColor(.white)
+                        .font(.system(size: 12))
+                } else {
+                    Text(formatTime(ticket.employee_arrival_time))
+                        .foregroundColor(.white)
+                        .font(.system(size: 12))
+                }
+
                 Text(ticket.status_name)
                     .font(.caption)
                     .padding(.horizontal, 8) // Reduced horizontal padding
@@ -449,8 +419,6 @@ struct TicketCard: View {
                         Button("Assign to Me") { onAssign?() }
                             .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)))
                     } else if ticket.status_id == 2 {
-                        Button("Arrival Date") { onSetArrival?() }
-                            .buttonStyle(ActionButtonStyle(color: .orange))
                         if let arrivalDate = ticket.employee_arrival_date, !arrivalDate.isEmpty {
                             Button("Start") { onStartWork?() }
                                 .buttonStyle(ActionButtonStyle(color: .blue))
@@ -474,6 +442,25 @@ struct TicketCard: View {
                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+
+    private func isToday(_ dateString: String?) -> Bool {
+        guard let dateString = dateString else {
+            print("⚠️ Date string is nil")
+            return false
+        }
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        if let date = isoFormatter.date(from: dateString) {
+            let result = Calendar.current.isDateInToday(date)
+            print("📅 Parsed date: \(date) | isToday = \(result)")
+            return result
+        } else {
+            print("❌ Failed to parse ISO8601 date: \(dateString)")
+            return false
+        }
     }
 
     private func formatTime(_ timeString: String?) -> String {

@@ -33,11 +33,6 @@ struct AllTicketsView: View {
                                 NavigationLink(destination: TicketDetailView(ticketId: ticket.ticket_id)) {
                                     TicketCard(
                                         ticket: ticket,
-                                        onSetArrival: {
-                                            viewModel.selectedTicket = ticket
-                                            viewModel.arrivalDate = Date()
-                                            viewModel.showArrivalSheet = true
-                                        },
                                         onStartWork: {
                                             viewModel.startWork(ticket: ticket)
                                         },
@@ -62,10 +57,6 @@ struct AllTicketsView: View {
             }
         }
         .edgesIgnoringSafeArea(.bottom)
-        // Reuse the same sheets from Dashboard
-        .sheet(isPresented: $viewModel.showArrivalSheet) {
-            ArrivalDateSheet(viewModel: viewModel)
-        }
         .sheet(isPresented: $viewModel.showServiceUpdateSheet) {
             ServiceUpdateSheet(viewModel: viewModel)
         }

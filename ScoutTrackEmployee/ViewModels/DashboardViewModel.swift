@@ -10,6 +10,7 @@ class DashboardViewModel: ObservableObject {
     @Published var inProgressCount: Int = 0
     @Published var pendingCount: Int = 0
     @Published var onHoldCount: Int = 0
+    @Published var selectedTicketDetail: TicketDetail?
     @Published var showArrivalSheet: Bool = false
     @Published var selectedTicket: Ticket?
     @Published var arrivalDate = Date()
@@ -32,6 +33,21 @@ class DashboardViewModel: ObservableObject {
     }
 
     private let context = PersistenceController.shared.container.viewContext
+// var hasPreAndPostUploads: Bool {
+//     guard let ticket = selectedTicket else {
+//         print("❌ selectedTicket is nil")
+//         return false
+//     }
+
+//     let preCount = ticket.employee_pre_uploads.count
+//     let postCount = ticket.employee_post_uploads.count
+
+//     print("🔍 Checking uploads for ticket \(ticket.ticket_id)")
+//     print("   Pre uploads: \(preCount)")
+//     print("   Post uploads: \(postCount)")
+
+//     return preCount > 0 && postCount > 0
+// }
 
     // Possible statuses for edit
     let editStatuses = ["Done", "On Hold", "Pending"]
@@ -319,63 +335,6 @@ class DashboardViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
-    // MARK: - Update Arrival Date
-
-    func updateArrivalDate() {
-        guard let ticket = selectedTicket else {
-            return
-        }
-
-        // Build DB-friendly string: "yyyy-MM-dd'T'HH:mm:ss" (NO Z, NO millis)
-        let formattedDate = Self.mysqlDateTimeNoZ(from: arrivalDate)
-        let isFirstArrival = (selectedTicket?.employee_arrival_date?.isEmpty ?? true)
-        // Build message (human readable)
-        let timeString = DateFormatter.localizedString(from: arrivalDate, dateStyle: .medium, timeStyle: .short)
-        let message = isFirstArrival
-            ? "Engineer will arrive on \(timeString)"
-            : "Engineer will arrive on \(timeString) due to \(arrivalReason)"
-
-        // Prepare status tracker JSON (if you later add previous data, pass it here)
-        let tracker = createStatusTracker(previousData: ticket.status_tracker, message: message, statusName: "Todo", statusId: 3)
-
-        // Prepare API request
-        guard let url = URL(string: "\(baseURL)/api/tickets/\(ticket.ticket_id)") else {
-            return
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: Any] = [
-            "ticketData": [
-                "employee_arrival_date": formattedDate, // <-- NO Z, NO millis
-                "status_tracker": tracker,
-            ],
-        ]
-
-        do {
-            let bodyData = try JSONSerialization.data(withJSONObject: body, options: [.prettyPrinted])
-            request.httpBody = bodyData
-
-            // 🔎 LOG: Request
-            if let headers = request.allHTTPHeaderFields { print("🧾 Headers:", headers) }
-        } catch {
-            return
-        }
-
-        // Send request
-        URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
-            if let error = error {}
-            DispatchQueue.main.async {
-                // consider checking status code 200..299
-                if let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) {
-                    self?.fetchTickets()
-                    self?.showArrivalSheet = false
-                }
-            }
-        }.resume()
-    }
-
     // MARK: - Start Work
 
     func startWork(ticket: Ticket) {
@@ -471,7 +430,6 @@ class DashboardViewModel: ObservableObject {
 
     // MARK: - Edit Status
 
-
     func updateTicketStatus() {
         guard let ticket = selectedTicket else { return }
 
@@ -548,12 +506,19 @@ class DashboardViewModel: ObservableObject {
             history = parsed
         }
 
+        // ✅ Custom date + time format with comma
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = .current
+        df.dateFormat = "MMM dd, yyyy, hh:mm a" // Example: "Sep 16, 2025, 09:03 AM"
+        let formattedDate = df.string(from: Date())
+
         let newEntry: [String: Any] = [
             "message": message,
             "status": statusName,
             "statusId": statusId,
             "changedBy": name,
-            "timestamp": ISO8601DateFormatter().string(from: Date()),
+            "timestamp": formattedDate, // ✅ Nice readable timestamp
         ]
 
         history.append(newEntry)

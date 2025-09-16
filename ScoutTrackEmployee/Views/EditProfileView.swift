@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct EditProfileView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) var dismiss // modern back dismiss for iOS 15+
 
     @State private var name = ""
     @State private var phone = ""
@@ -14,25 +14,32 @@ struct EditProfileView: View {
         VStack(spacing: 0) {
             // Header
             ZStack {
+                Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
+                    .ignoresSafeArea(edges: .top)
+
                 HStack {
                     Button(action: {
-                        presentationMode.wrappedValue.dismiss()
+                        dismiss() // works for both push and sheet
                     }) {
                         Image(systemName: "chevron.left")
                             .foregroundColor(.white)
-                            .font(.title2) // make back button bigger
+                            .font(.title)
+                            .padding(.leading, 8)
                     }
                     Spacer()
+                    Text("Edit Profile")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+                    Spacer()
                 }
-
-                Text("Edit Profile")
-                    .font(.system(size: 22, weight: .bold)) // bigger title
-                    .foregroundColor(.white)
+                .padding(.top, UIApplication.shared.connectedScenes
+                    .compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.top }
+                    .first ?? 20) // push down from notch
+                .padding(.horizontal)
             }
-            .frame(height: 70) // taller header
-            .padding(.horizontal)
-            .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
+            .frame(height: 100) // taller bar
 
+            // Content
             ScrollView {
                 VStack(spacing: 20) {
                     // Profile Circle
@@ -95,7 +102,7 @@ struct EditProfileView: View {
                 title: Text("Success"),
                 message: Text("Profile updated successfully!"),
                 dismissButton: .default(Text("OK")) {
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                 }
             )
         }
