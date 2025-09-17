@@ -67,6 +67,12 @@ struct EventView: View {
         }
     }
 
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    var columns: [GridItem] {
+        let count = (horizontalSizeClass == .compact) ? 1 : 2
+        return Array(repeating: GridItem(.flexible(), spacing: 16), count: count)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Picker("Status", selection: $selectedStatus) {
@@ -93,7 +99,7 @@ struct EventView: View {
                     .foregroundColor(.gray)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 16) {
+                    LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(filteredTickets) { ticket in
                             ticketCard(ticket)
                         }
@@ -120,9 +126,7 @@ struct EventView: View {
                     FooterTab(icon: "person", label: "Profile")
                 }
             }
-            .padding(.horizontal)
-            .padding(.bottom, 16)
-            .padding(.top, 8)
+            .padding()
         }
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarBackButtonHidden(true)
@@ -280,9 +284,15 @@ struct EventView: View {
                 .font(.system(size: 12))
                 .frame(width: 80, alignment: .leading) // fixed width for labels
             if isLink {
-                Link(value, destination: URL(string: "tel:\(value)")!)
-                    .foregroundColor(Color(red: 0, green: 128 / 255, blue: 128 / 255))
-                    .font(.system(size: 12))
+                if let phoneURL = URL(string: "tel:\(value)") {
+                    Link(value, destination: phoneURL)
+                        .foregroundColor(Color(red: 0, green: 128 / 255, blue: 128 / 255))
+                        .font(.system(size: 12))
+                } else {
+                    Text(value)
+                        .foregroundColor(Color(red: 0, green: 128 / 255, blue: 128 / 255))
+                        .font(.system(size: 12))
+                }
             } else {
                 Text(value)
                     .foregroundColor(Color(red: 0, green: 128 / 255, blue: 128 / 255))
@@ -301,17 +311,21 @@ struct EventView: View {
         fetchTickets()
     }
 
+    struct APIError: Codable {
+        let error: String
+    }
+
     func fetchTickets() {
         loading = true
         errorMessage = nil
 
-        guard let url = URL(string: "http://localhost:4200/api/tickets/employee/\(userId)?status_id=2") else {
+        guard let url = URL(string: "\(Config.baseURL)/api/tickets/employee/\(userId)?status_id=2") else {
             errorMessage = "Invalid URL"
             loading = false
             return
         }
 
-        URLSession.shared.dataTask(with: url) { data, response, error in
+        URLSession.shared.dataTask(with: url) { data, _, error in
             DispatchQueue.main.async {
                 loading = false
                 if let error = error {
@@ -319,33 +333,39 @@ struct EventView: View {
                     return
                 }
 
-                if let httpResponse = response as? HTTPURLResponse {}
-
                 guard let data = data else {
                     errorMessage = "No data received"
                     return
                 }
 
-                // Print the raw response to debug
+                // Debug raw response
                 if let rawString = String(data: data, encoding: .utf8) {
                     print("API Response: \(rawString)")
                 }
 
                 do {
-                    // First try to decode as TicketResponse (with "list" key)
-                    let decoded = try JSONDecoder().decode(TicketResponse.self, from: data)
-                    tickets = decoded.list
-                } catch {
-                    print("Failed to decode as TicketResponse: \(error)")
-
-                    // If that fails, try to decode directly as array of Tickets
-                    do {
-                        let directTickets = try JSONDecoder().decode([Tickets].self, from: data)
-                        tickets = directTickets
-                    } catch {
-                        print("Failed to decode as direct array: \(error)")
-                        errorMessage = "Failed to parse tickets: \(error.localizedDescription)"
+                    // Try decoding APIError first
+                    if let apiError = try? JSONDecoder().decode(APIError.self, from: data) {
+                        errorMessage = apiError.error
+                        tickets = []
+                        return
                     }
+
+                    // Then try TicketResponse with "list" key
+                    if let decoded = try? JSONDecoder().decode(TicketResponse.self, from: data) {
+                        tickets = decoded.list
+                        return
+                    }
+
+                    // Finally try direct array
+                    if let directTickets = try? JSONDecoder().decode([Tickets].self, from: data) {
+                        tickets = directTickets
+                        return
+                    }
+
+                    errorMessage = "Unknown data format"
+                } catch {
+                    errorMessage = "Decoding error: \(error.localizedDescription)"
                 }
             }
         }.resume()

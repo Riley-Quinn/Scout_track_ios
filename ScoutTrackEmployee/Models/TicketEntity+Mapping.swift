@@ -20,7 +20,6 @@ extension TicketEntity {
             status_tracker: status_tracker,
             title: title ?? "",
             employee_arrival_time: employee_arrival_time ?? ""
-            
         )
     }
 }

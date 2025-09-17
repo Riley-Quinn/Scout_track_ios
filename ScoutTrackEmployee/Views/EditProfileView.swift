@@ -117,7 +117,7 @@ struct EditProfileView: View {
     private func fetchProfile() {
         guard let userId = UserDefaults.standard.string(forKey: "userId"),
               let clientId = UserDefaults.standard.string(forKey: "clientId"),
-              let url = URL(string: "http://localhost:4200/api/employee/\(userId)")
+              let url = URL(string: "\(Config.baseURL)/api/employee/\(userId)")
         else {
             errorMessage = "Missing userId or invalid URL"
             isLoading = false
@@ -162,7 +162,7 @@ struct EditProfileView: View {
         errorMessage = nil
 
         guard let userId = UserDefaults.standard.string(forKey: "userId"),
-              let url = URL(string: "http://localhost:4200/api/employee/\(userId)")
+              let url = URL(string: "\(Config.baseURL)/api/employee/\(userId)")
         else {
             errorMessage = "Missing userId or invalid URL"
             return

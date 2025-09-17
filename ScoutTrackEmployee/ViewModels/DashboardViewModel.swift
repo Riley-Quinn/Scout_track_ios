@@ -23,7 +23,6 @@ class DashboardViewModel: ObservableObject {
     @Published var editReason: String = ""
     @Published var weeklyToDoCounts: [String: Int] = [:] // ← Add this
     private var cancellables = Set<AnyCancellable>()
-    private let baseURL = "http://localhost:4200"
     private var userId: String {
         UserDefaults.standard.string(forKey: "userId") ?? "0"
     }
@@ -33,7 +32,7 @@ class DashboardViewModel: ObservableObject {
     }
 
     private let context = PersistenceController.shared.container.viewContext
-// var hasPreAndPostUploads: Bool {
+    // var hasPreAndPostUploads: Bool {
 //     guard let ticket = selectedTicket else {
 //         print("❌ selectedTicket is nil")
 //         return false
@@ -47,7 +46,7 @@ class DashboardViewModel: ObservableObject {
 //     print("   Post uploads: \(postCount)")
 
 //     return preCount > 0 && postCount > 0
-// }
+    // }
 
     // Possible statuses for edit
     let editStatuses = ["Done", "On Hold", "Pending"]
@@ -69,7 +68,7 @@ class DashboardViewModel: ObservableObject {
     // MARK: - Fetch Tickets (API + Core Data)
 
     func fetchTickets(onlyToday: Bool = false) {
-        guard let url = URL(string: "\(baseURL)/api/tickets/employee/\(userId)") else {
+        guard let url = URL(string: "\(Config.baseURL)/api/tickets/employee/\(userId)") else {
             return
         }
 
@@ -190,7 +189,7 @@ class DashboardViewModel: ObservableObject {
     }
 
     func fetchAllTickets() {
-        guard let url = URL(string: "\(baseURL)/api/tickets/employee/\(userId)") else {
+        guard let url = URL(string: "\(Config.baseURL)/api/tickets/employee/\(userId)") else {
             print("❌ Invalid URL")
             return
         }
@@ -319,7 +318,7 @@ class DashboardViewModel: ObservableObject {
     // MARK: - Fetch Status Counts
 
     func fetchAllStatusCounts() {
-        guard let url = URL(string: "\(baseURL)/api/tickets/employee/ticket-counts/\(userId)") else { return }
+        guard let url = URL(string: "\(Config.baseURL)/api/tickets/employee/ticket-counts/\(userId)") else { return }
 
         URLSession.shared.dataTaskPublisher(for: url)
             .map { $0.data }
@@ -346,7 +345,7 @@ class DashboardViewModel: ObservableObject {
             statusId: 3
         )
 
-        guard let url = URL(string: "\(baseURL)/api/tickets/\(ticket.ticket_id)") else {
+        guard let url = URL(string: "\(Config.baseURL)/api/tickets/\(ticket.ticket_id)") else {
             return
         }
         var request = URLRequest(url: url)
@@ -398,7 +397,7 @@ class DashboardViewModel: ObservableObject {
         )
 
         // API Call
-        guard let url = URL(string: "\(baseURL)/api/tickets/\(ticket.ticket_id)") else { return }
+        guard let url = URL(string: "\(Config.baseURL)/api/tickets/\(ticket.ticket_id)") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -457,7 +456,7 @@ class DashboardViewModel: ObservableObject {
             statusId: statusId
         )
 
-        guard let url = URL(string: "\(baseURL)/api/tickets/\(ticket.ticket_id)") else { return }
+        guard let url = URL(string: "\(Config.baseURL)/api/tickets/\(ticket.ticket_id)") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")

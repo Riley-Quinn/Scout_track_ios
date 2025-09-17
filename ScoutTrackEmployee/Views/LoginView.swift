@@ -8,31 +8,25 @@ struct LoginView: View {
     @State private var email = "testemp@gmail.com"
     @State private var password = "Password123!"
     @State private var rememberMe = false
-    @State private var navigateToDashboard = false
     @State private var isLoading = false
     @State private var alertMessage = ""
     @State private var showAlert = false
 
     @AppStorage("sessionActive") private var sessionActive: Bool = false
 
-    private let BASE_URL = "http://localhost:4200"
-
-    // Core Data context
     private let context = PersistenceController.shared.container.viewContext
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Background
-                Image("background")
-                    .resizable()
-                    .scaledToFill()
-                    .ignoresSafeArea()
-                    .zIndex(0)
+        ZStack {
+            Image("background")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
 
-                ScrollView {
-                    VStack {
-                        Spacer().frame(height: 60)
+            GeometryReader { geo in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        Spacer(minLength: geo.size.height * 0.1) // Top spacing
 
                         // Logo
                         Image("logo")
@@ -54,7 +48,7 @@ struct LoginView: View {
                         .padding(.horizontal)
                         .padding(.top, 20)
 
-                        // Button or loader
+                        // Button / Loader
                         if isLoading {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle(tint: Color(hex: "#FF6B00")))
@@ -69,15 +63,9 @@ struct LoginView: View {
                                     .foregroundColor(.white)
                                     .cornerRadius(16)
                             }
-                            .padding(.horizontal)
                             .padding(.top)
+                            .padding(.horizontal)
                         }
-
-                        // Navigation
-                        NavigationLink(destination: DashboardView(), isActive: $navigateToDashboard) {
-                            EmptyView()
-                        }
-                        .hidden()
 
                         // Remember Me + Forgot Password
                         HStack {
@@ -98,27 +86,26 @@ struct LoginView: View {
                         .padding(.horizontal)
                         .padding(.top, 10)
 
-                        Spacer()
+                        Spacer(minLength: geo.size.height * 0.1) // Bottom spacing
                     }
-                    .padding(.bottom, 60)
+                    .frame(minHeight: geo.size.height)
                 }
-                .zIndex(1)
             }
-            .alert(isPresented: $showAlert) {
-                Alert(
-                    title: Text("Message"),
-                    message: Text(alertMessage),
-                    dismissButton: .default(Text("OK")) {
-                        if alertMessage.contains("successful") {
-                            navigateToDashboard = true
-                        }
+        }
+        .alert(isPresented: $showAlert) {
+            Alert(
+                title: Text("Message"),
+                message: Text(alertMessage),
+                dismissButton: .default(Text("OK")) {
+                    if alertMessage.contains("successful") {
+                        sessionActive = true
                     }
-                )
-            }
+                }
+            )
         }
     }
 
-    // MARK: - Login API Call with Core Data Fallback
+    // MARK: - Login API Call
 
     private func handleLogin() {
         guard !email.isEmpty, !password.isEmpty else {
@@ -129,7 +116,7 @@ struct LoginView: View {
 
         isLoading = true
 
-        let url = URL(string: "\(BASE_URL)/api/auth/admin/login")!
+        let url = URL(string:"\(Config.baseURL)/api/auth/admin/login")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -144,7 +131,7 @@ struct LoginView: View {
         URLSession.shared.dataTask(with: request) { data, response, error in
             DispatchQueue.main.async { self.isLoading = false }
 
-            if let error = error {
+            if let _ = error {
                 checkOfflineLogin()
                 return
             }
@@ -158,15 +145,11 @@ struct LoginView: View {
                 if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let empData = json["empData"] as? [String: Any]
                 {
-                    // Save to UserDefaults
                     UserDefaults.standard.set(empData["userId"], forKey: "userId")
                     UserDefaults.standard.set(empData["name"], forKey: "name")
                     UserDefaults.standard.set(empData["Role"], forKey: "Role")
                     UserDefaults.standard.set(empData["client_id"], forKey: "clientId")
 
-                    if rememberMe { sessionActive = true }
-
-                    // Save to Core Data
                     let newUser = User(context: context)
                     newUser.userId = empData["userId"] as? String ?? ""
                     newUser.name = empData["name"] as? String ?? ""
@@ -175,9 +158,7 @@ struct LoginView: View {
                     newUser.email = email
                     newUser.password = password
 
-                    do {
-                        try context.save()
-                    } catch {}
+                    try? context.save()
 
                     DispatchQueue.main.async {
                         self.alertMessage = "Login successful"
@@ -193,19 +174,17 @@ struct LoginView: View {
         }.resume()
     }
 
-    // MARK: - Offline Login Fallback
-
     private func checkOfflineLogin() {
         let request = User.fetchRequest()
-        if let savedUser = try? context.fetch(request).first {
-            if savedUser.email == email && savedUser.password == password {
-                DispatchQueue.main.async {
-                    self.alertMessage = "Offline login successful"
-                    self.showAlert = true
-                    self.navigateToDashboard = true
-                }
-                return
+        if let savedUser = try? context.fetch(request).first,
+           savedUser.email == email, savedUser.password == password
+        {
+            DispatchQueue.main.async {
+                self.alertMessage = "Offline login successful"
+                self.showAlert = true
+                self.sessionActive = true
             }
+            return
         }
         DispatchQueue.main.async {
             self.alertMessage = "Login failed (offline mode)"

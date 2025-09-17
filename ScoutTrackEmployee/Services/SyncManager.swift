@@ -28,7 +28,7 @@ class SyncManager {
     }
 
     private func uploadToServer(_ upload: LocalUpload, completion: @escaping (Bool) -> Void) {
-        let url = URL(string: "http://localhost:4200/api/employee-uploads")! // replace with your backend
+        let url = URL(string: "\(Config.baseURL)/api/employee-uploads")! // replace with your backend
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

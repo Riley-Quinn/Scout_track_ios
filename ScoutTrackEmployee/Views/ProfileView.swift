@@ -11,6 +11,7 @@ struct ProfileView: View {
     @State private var userId: String? = nil
     @State private var isLoading = true
     @State private var navigateToLogin = false // 🔹 New state
+    @AppStorage("sessionActive") private var sessionActive: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -104,11 +105,9 @@ struct ProfileView: View {
                     Spacer()
                     FooterTab(icon: "person", label: "Profile", selected: true)
                 }
+                .padding()
             }
         }
-        .padding(.horizontal)
-        .padding(.bottom, 16)
-        .padding(.top, 8)
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarBackButtonHidden(true)
         .navigationBarHidden(true)
@@ -143,7 +142,7 @@ struct ProfileView: View {
     }
 
     func fetchProfile(userId: String) {
-        guard let url = URL(string: "http://localhost:4200/api/employee/\(userId)") else {
+        guard let url = URL(string: "\(Config.baseURL)/api/employee/\(userId)") else {
             isLoading = false
             return
         }
@@ -168,6 +167,7 @@ struct ProfileView: View {
         UserDefaults.standard.removeObject(forKey: "name")
         UserDefaults.standard.removeObject(forKey: "Role")
         UserDefaults.standard.removeObject(forKey: "client_id")
+        sessionActive = false
         navigateToLogin = true // 🔹 Trigger navigation
     }
 }

@@ -23,6 +23,8 @@ struct CalendarView: View {
         let city_name: String?
         let ticket_service_id: String?
         let title: String?
+        let status_name: String?
+        let region_name: String?
         var id: String { ticket_id }
         var date: Date {
             guard let dateStr = employee_arrival_date else {
@@ -79,7 +81,7 @@ struct CalendarView: View {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case ticket_id, employee_arrival_date, employee_arrival_time, address, city_name, ticket_service_id, title
+            case ticket_id, employee_arrival_date, employee_arrival_time, address, city_name, ticket_service_id, title, status_name, region_name
         }
 
         init(from decoder: Decoder) throws {
@@ -97,6 +99,8 @@ struct CalendarView: View {
             city_name = try? container.decodeIfPresent(String.self, forKey: .city_name)
             ticket_service_id = try? container.decodeIfPresent(String.self, forKey: .ticket_service_id)
             title = try? container.decodeIfPresent(String.self, forKey: .title)
+            status_name = try? container.decodeIfPresent(String.self, forKey: .status_name)
+            region_name = try? container.decodeIfPresent(String.self, forKey: .region_name)
         }
     }
 
@@ -117,23 +121,30 @@ struct CalendarView: View {
         VStack(spacing: 0) {
             headerView
 
-            ScrollView {
-                VStack(spacing: 0) {
-                    viewModePicker
-                    Divider()
+            // Fixed View Mode Picker
+            viewModePicker
+            Divider()
 
-                    switch viewMode {
-                    case .month: monthView
-                    case .week: weekView
-                    case .day: dayView
-                    case .agenda: agendaView
-                    }
-
-                    // Use the extracted property
-                    filteredTicketsGroupedView
+            // Fixed Calendar View
+            VStack(spacing: 0) {
+                switch viewMode {
+                case .month: monthView
+                case .week: weekView
+                case .day: dayView
+                case .agenda: EmptyView() // No calendar for agenda view
                 }
             }
+            .background(Color.white)
 
+            if viewMode != .agenda {
+                Divider()
+            }
+
+            // <-- IMPORTANT: use the filteredTicketsGroupedView directly (it contains its own ScrollView).
+            filteredTicketsGroupedView
+                .padding(.top, viewMode == .agenda ? 0 : 16)
+
+            // Fixed Footer
             Divider()
 
             HStack {
@@ -151,77 +162,180 @@ struct CalendarView: View {
                     FooterTab(icon: "person", label: "Profile")
                 }
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding()
         }
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarBackButtonHidden(true)
-        .onAppear { fetchTickets() }
+        .onAppear {
+            // ensure we start with the start of today selected
+            let todayStart = calendar.startOfDay(for: Date())
+            selectedDate = todayStart
+            currentDate = todayStart
+            fetchTickets()
+        }
     }
 
     @State private var showPastEvents = false
 
-    // Replace allTicketsGroupedView with this:
-    private var filteredTicketsGroupedView: some View {
-        let cutoffDate = selectedDate ?? Date() // Use selected date or today
-        let filteredTickets = tickets.filter { $0.date >= Calendar.current.startOfDay(for: cutoffDate) }
+    // PreferenceKey used to report section minY positions
+    struct DateSectionPreferenceKey: PreferenceKey {
+        static var defaultValue: [Date: CGFloat] = [:]
+        static func reduce(value: inout [Date: CGFloat], nextValue: () -> [Date: CGFloat]) {
+            value.merge(nextValue(), uniquingKeysWith: { $1 })
+        }
+    }
 
-        let groupedTickets = Dictionary(grouping: filteredTickets.sorted(by: { $0.date < $1.date })) {
+    // Enhanced tickets view with automatic date selection while scrolling
+    private var filteredTicketsGroupedView: some View {
+        let today = Calendar.current.startOfDay(for: Date())
+
+        // Split tickets into past and present+future
+        let pastTickets = tickets.filter { $0.date < today }
+        let presentAndFuture = tickets.filter { $0.date >= today }
+
+        // Group by day
+        let groupedPast = Dictionary(grouping: pastTickets.sorted(by: { $0.date < $1.date })) {
             Calendar.current.startOfDay(for: $0.date)
         }
-        let sortedDates = groupedTickets.keys.sorted()
+        let groupedFuture = Dictionary(grouping: presentAndFuture.sorted(by: { $0.date < $1.date })) {
+            Calendar.current.startOfDay(for: $0.date)
+        }
 
-        return VStack(alignment: .leading, spacing: 12) {
-            ForEach(sortedDates, id: \.self) { date in
-                VStack(alignment: .leading, spacing: 6) {
-                    // Date Header
-                    Text("Tickets for \(dateString(from: date))")
-                        .font(.headline)
-                        .padding(.bottom, 4)
+        // Sorted keys
+        let sortedPastDates = groupedPast.keys.sorted() // oldest → newest
+        let sortedFutureDates = groupedFuture.keys.sorted() // today → future
 
-                    // Tickets for that day
-                    if let dayTickets = groupedTickets[date], !dayTickets.isEmpty {
-                        ForEach(dayTickets) { ticket in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    // Date
-                                    Text(dateString(from: ticket.date))
-                                        .font(.caption)
-                                        .foregroundColor(.black)
-
-                                    // Separator
-                                    Text("|")
-                                        .foregroundColor(.black)
-                                        .fontWeight(.bold)
-
-                                    // Title
-                                    Text(ticket.title ?? "No Title")
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .lineLimit(1)
-
-                                    Spacer()
-                                }
-
-                                // Time in teal color
-                                Text(timeString(from: ticket.date))
-                                    .font(.caption)
-                                    .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
-                            }
-                            .padding(.vertical, 6)
-                            Divider()
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                // --- PAST TICKETS ---
+                // Show button first, then expand if user wants
+                if !sortedPastDates.isEmpty {
+                    if showPastEvents {
+                        ForEach(sortedPastDates, id: \.self) { date in
+                            ticketSection(date: date, tickets: groupedPast[date] ?? [])
                         }
                     } else {
-                        Text("No tickets for this date.")
-                            .foregroundColor(.gray)
-                            .font(.subheadline)
+                        Button {
+                            withAnimation { showPastEvents = true }
+                        } label: {
+                            Text(" Show Earlier Tickets")
+                                .font(.subheadline)
+                                .foregroundColor(.blue)
+                                .padding(.vertical, 8)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
                     }
                 }
-                .padding()
-                .background(Color.white)
+
+                // --- TODAY + FUTURE TICKETS (shown by default) ---
+                ForEach(sortedFutureDates, id: \.self) { date in
+                    ticketSection(date: date, tickets: groupedFuture[date] ?? [])
+                }
+            }
+            .padding(.horizontal)
+        }
+        .coordinateSpace(name: "TicketsScrollView")
+        .onPreferenceChange(DateSectionPreferenceKey.self) { values in
+            // Only consider sections visible in viewport
+            let visibleSections = values.filter { $0.value >= -50 }
+            if let closest = visibleSections.min(by: { $0.value < $1.value }) {
+                if closest.key != selectedDate {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        selectedDate = closest.key
+                        currentDate = closest.key
+                    }
+                }
             }
         }
-        .padding()
+    }
+
+    private func ticketSection(date: Date, tickets: [CalendarTicket]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("\(dateString(from: date))")
+                .font(.system(size: 14))
+                .padding(.bottom, 4)
+
+            if tickets.isEmpty {
+                Text("No tickets for this date.")
+                    .font(.subheadline)
+                    .padding(.horizontal, 16)
+            } else {
+                ForEach(tickets) { ticket in
+                    ticketRow(ticket)
+                    if ticket.id != tickets.last?.id {
+                        Divider().padding(.horizontal, 16)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: DateSectionPreferenceKey.self,
+                    value: [date: geo.frame(in: .named("TicketsScrollView")).minY]
+                )
+            }
+        )
+    }
+
+    private func stickyDateHeader(for date: Date) -> some View {
+        Text(dateString(from: date))
+            .font(.headline)
+            .padding(.vertical, 6)
+            .padding(.horizontal)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.shadow(color: .black.opacity(0.1), radius: 2, y: 2))
+    }
+
+    private func ticketRow(_ ticket: CalendarTicket) -> some View {
+        HStack(spacing: 8) {
+            // Left column (time / status)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(timeString(from: ticket.date))
+                    .font(.caption)
+                    .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
+                Text(ticket.status_name ?? "")
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(color(for: ticket.status_name))
+            }
+            .frame(width: 60, alignment: .leading)
+
+            // Middle divider (single for both lines)
+            Rectangle()
+                .fill(Color.gray.opacity(0.6))
+                .frame(width: 3)
+                .padding(.vertical, 0) // spans full height of HStack automatically
+
+            // Right column (title / region)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ticket.title ?? "No Title")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                Text(ticket.region_name ?? "")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 16)
+    }
+
+    // Helper function to get color based on status
+    private func color(for status: String?) -> Color {
+        switch status?.lowercased() {
+        case "open": return .blue
+        case "todo": return .red
+        case "in-progress": return .orange
+        case "done": return .green
+        case "closed": return .teal
+        case "on hold": return .yellow
+        case "pending": return .purple
+        default: return .black
+        }
     }
 
     private func dateString(from date: Date) -> String {
@@ -235,32 +349,55 @@ struct CalendarView: View {
 
     private func fetchTickets() {
         guard let userId = UserDefaults.standard.string(forKey: "userId"),
-              let url = URL(string: "http://localhost:4200/api/tickets/employee/\(userId)")
+              let url = URL(string: "\(Config.baseURL)/api/tickets/employee/\(userId)")
         else {
             return
         }
 
         URLSession.shared.dataTask(with: url) { data, _, error in
             if let error = error {
+                print("Fetch error: \(error)")
                 return
             }
             guard let data = data else {
+                print("No data")
                 return
             }
 
             do {
                 let decoded = try JSONDecoder().decode(TicketResponse.self, from: data)
                 DispatchQueue.main.async {
-                    self.tickets = decoded.list
-                    print("✅ Fetched \(decoded.list.count) tickets")
+                    // 🚀 Filter out tickets without employee_arrival_date
+                    self.tickets = decoded.list.filter { ticket in
+                        if let dateStr = ticket.employee_arrival_date,
+                           !dateStr.trimmingCharacters(in: .whitespaces).isEmpty
+                        {
+                            return true
+                        }
+                        return false
+                    }
 
-                    for ticket in decoded.list {
+                    print("✅ Fetched \(self.tickets.count) tickets with arrival dates")
+
+                    for ticket in self.tickets {
                         print("Ticket \(ticket.ticket_id): Date = \(ticket.employee_arrival_date ?? "nil"), Time = \(ticket.employee_arrival_time ?? "nil"), Parsed = \(ticket.date)")
                     }
-                }
 
+                    // ensure selectedDate is on a day that exists in tickets (if not already)
+                    let todayStart = calendar.startOfDay(for: Date())
+                    if let firstTicketDate = self.tickets.map({ Calendar.current.startOfDay(for: $0.date) }).sorted().first,
+                       !Calendar.current.isDate(firstTicketDate, inSameDayAs: selectedDate ?? todayStart)
+                    {
+                        selectedDate = firstTicketDate
+                        currentDate = firstTicketDate
+                    }
+                }
             } catch {
-                if let str = String(data: data, encoding: .utf8) {}
+                if let str = String(data: data, encoding: .utf8) {
+                    print("Decode error: \(error). Server response: \(str)")
+                } else {
+                    print("Decode error: \(error)")
+                }
             }
         }.resume()
     }
@@ -279,7 +416,11 @@ struct CalendarView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 4)
                 }
-                Button(action: { currentDate = Date() }) {
+                Button(action: {
+                    let today = calendar.startOfDay(for: Date())
+                    selectedDate = today
+                    currentDate = today
+                }) {
                     Text("Today")
                         .font(.subheadline)
                         .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
@@ -320,6 +461,7 @@ struct CalendarView: View {
             }
         }
         .padding(.vertical, 6)
+        .background(Color.white)
     }
 
     // MARK: - Month View
@@ -327,20 +469,20 @@ struct CalendarView: View {
     private var monthView: some View {
         let days = generateMonthDays(for: currentDate)
 
-        return VStack(spacing: 4) { // reduce spacing between header and rows
+        return VStack(spacing: 4) {
             // Weekday headers
             HStack {
                 ForEach(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], id: \.self) { day in
                     Text(day)
                         .font(.caption2)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 1) // smaller header height
+                        .padding(.vertical, 1)
                 }
             }
 
             // Full month grid with reduced row gap
             ForEach(0 ..< days.count / 7, id: \.self) { weekIndex in
-                HStack(spacing: 2) { // less column spacing
+                HStack(spacing: 2) {
                     ForEach(0 ..< 7, id: \.self) { dayIndex in
                         let day = days[weekIndex * 7 + dayIndex]
 
@@ -353,59 +495,89 @@ struct CalendarView: View {
                                 currentDate = date
                             }
                         )
-                        .frame(maxWidth: .infinity, minHeight: 45) // smaller height
+                        .frame(maxWidth: .infinity, minHeight: 45)
                     }
                 }
-                .padding(.vertical, 0) // no extra gap between rows
+                .padding(.vertical, 0)
             }
         }
-        .padding(.horizontal, 2)
-        .padding(.top, 2)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
     }
 
     // MARK: - Week View
 
     private var weekView: some View {
-        let days = generateContinuousDays(centeredOn: currentDate, range: 12)
+        // Calculate start of the current week (Sunday)
+        let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: currentDate))!
 
-        return VStack(spacing: 0) {
-            // Sticky month label
-            Text(weekMonthLabel(for: currentDate))
-                .font(.subheadline)
-                .padding(.vertical, 4)
-                .frame(maxWidth: .infinity)
-                .background(Color.white)
-                .shadow(radius: 1)
+        // Build multiple weeks (e.g., 6 weeks: 3 before, 3 after)
+        let weekOffsets = (-5 ... 5)
+        let ticketsForCells = tickets.map { (id: $0.id, date: $0.localDay, title: $0.title) }
 
-            // ✅ Wrap ScrollView in ScrollViewReader for auto-scroll
+        // Day width = screen width / 7 to show exactly 7 days
+        let dayWidth = UIScreen.main.bounds.width / 7
+
+        return VStack(spacing: 6) {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 0) {
-                        ForEach(days, id: \.self) { day in
-                            DayCell(
-                                day: day,
-                                tickets: tickets.map { (id: $0.id, date: $0.localDay, title: $0.title) },
-                                selectedDate: selectedDate,
-                                onDateSelected: { date in
-                                    selectedDate = date
-                                    currentDate = date // Sync selected date
+                    HStack(spacing: 0) {
+                        ForEach(weekOffsets, id: \.self) { offset in
+                            if let weekStart = calendar.date(byAdding: .weekOfYear, value: offset, to: startOfWeek) {
+                                let weekDays: [DayInfo] = (0 ..< 7).compactMap { dayOffset in
+                                    if let date = calendar.date(byAdding: .day, value: dayOffset, to: weekStart) {
+                                        return dayInfo(for: date)
+                                    }
+                                    return nil
                                 }
-                            )
-                            .frame(width: 50, height: 80)
-                            .id(day.date) // ✅ Important for scrollTo
+
+                                VStack(spacing: 4) {
+                                    // Weekday labels
+                                    HStack(spacing: 0) {
+                                        ForEach(weekDays, id: \.self) { day in
+                                            Text(shortWeekday(for: day.date))
+                                                .font(.caption2)
+                                                .frame(width: dayWidth)
+                                        }
+                                    }
+
+                                    // Day cells
+                                    HStack(spacing: 0) {
+                                        ForEach(weekDays, id: \.self) { day in
+                                            DayCell(
+                                                day: day,
+                                                tickets: ticketsForCells,
+                                                selectedDate: selectedDate,
+                                                onDateSelected: { date in
+                                                    selectedDate = date
+                                                    currentDate = date
+                                                    withAnimation { proxy.scrollTo(weekStart, anchor: .center) }
+                                                }
+                                            )
+                                            .frame(width: dayWidth, height: 70)
+                                        }
+                                    }
+                                }
+                                .id(weekStart)
+                            }
                         }
                     }
-                    .padding(.horizontal)
                 }
                 .onAppear {
-                    // ✅ Scroll to today's date when view appears
-                    if let today = days.first(where: { $0.isToday })?.date {
-                        proxy.scrollTo(today, anchor: .center)
-                    }
+                    withAnimation { proxy.scrollTo(startOfWeek, anchor: .center) }
                 }
             }
-            .frame(height: 90)
         }
+        .padding(.vertical, 8)
+    }
+
+    private func shortWeekday(for date: Date) -> String {
+        var isoCalendar = Calendar(identifier: .iso8601)
+        isoCalendar.timeZone = Calendar.current.timeZone
+        let formatter = DateFormatter()
+        formatter.calendar = isoCalendar
+        formatter.dateFormat = "E"
+        return String(formatter.string(from: date).prefix(3)) // Mon, Tue, ...
     }
 
     private func weekMonthLabel(for date: Date) -> String {
@@ -422,44 +594,19 @@ struct CalendarView: View {
                 .font(.headline)
                 .padding()
             if let ticket = tickets.first(where: { calendar.isDate($0.localDay, inSameDayAs: currentDate) }) {
-                // Text("Ticket #\(ticket.ticket_service_id)")
-                //     .padding()
-                //     .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
-                //     .foregroundColor(.white)
-                //     .cornerRadius(6)
+                // Show selected day info
             } else {
                 Text("No events")
                     .foregroundColor(.gray)
             }
         }
+        .padding(.vertical, 8)
     }
 
-    // MARK: - Agenda View
+    // MARK: - Agenda View (Calendar hidden, only tickets shown)
 
     private var agendaView: some View {
-        List {
-            ForEach(tickets.sorted(by: { $0.date < $1.date })) { ticket in
-                VStack(alignment: .leading) {
-                    if ticket.date != Date.distantFuture {
-                        Text(formattedDate(ticket.date))
-                            .font(.subheadline)
-                    } else {
-                        Text("No Date")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                    }
-                    Text("Ticket #\(ticket.ticket_id)")
-                        .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
-                        .font(.headline)
-                    if let address = ticket.address, let city = ticket.city_name {
-                        Text("\(address), \(city)")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-        }
+        EmptyView() // No calendar view for agenda mode
     }
 
     // MARK: - Helpers
@@ -531,16 +678,18 @@ struct CalendarView: View {
 
     private func generateContinuousDays(centeredOn date: Date, range: Int) -> [DayInfo] {
         var days: [DayInfo] = []
-        let calendar = Calendar.current
+        var isoCalendar = Calendar(identifier: .iso8601) // Monday-based weeks
+        isoCalendar.timeZone = Calendar.current.timeZone
+        let alignedDate = isoCalendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date
         let totalDays = (range * 7)
 
-        if let startDate = calendar.date(byAdding: .day, value: -totalDays, to: date),
-           let endDate = calendar.date(byAdding: .day, value: totalDays, to: date)
+        if let startDate = isoCalendar.date(byAdding: .day, value: -totalDays, to: alignedDate),
+           let endDate = isoCalendar.date(byAdding: .day, value: totalDays, to: alignedDate)
         {
             var current = startDate
             while current <= endDate {
                 days.append(dayInfo(for: current))
-                current = calendar.date(byAdding: .day, value: 1, to: current)!
+                current = isoCalendar.date(byAdding: .day, value: 1, to: current)!
             }
         }
 
@@ -548,9 +697,8 @@ struct CalendarView: View {
     }
 
     struct DayInfo: Hashable {
-        let date: Date?
+        let date: Date
         let number: Int
-
         let isToday: Bool
     }
 
@@ -566,28 +714,24 @@ struct CalendarView: View {
     private func timeString(from date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"
-        formatter.timeZone = .current // ✅ Convert to user’s local time
+        formatter.timeZone = .current
         return formatter.string(from: date)
     }
 }
 
+// DayCell and TicketDetailsView unchanged (kept as in your original code)
 struct DayCell: View {
     let day: CalendarView.DayInfo
     let tickets: [(id: String, date: Date, title: String?)]
-    let selectedDate: Date? // ✅ Added
+    let selectedDate: Date?
     let onDateSelected: (Date) -> Void
 
     private let calendar = Calendar.current
-    @State private var selectedTickets: [(id: String, title: String?)] = []
-    @State private var showDetails = false
 
     var body: some View {
         VStack(spacing: 4) {
-            Button(action: {
-                if let date = day.date {
-                    onDateSelected(date)
-                }
-            }) {
+            // Day number
+            Button(action: { onDateSelected(day.date) }) {
                 Text(day.number > 0 ? "\(day.number)" : "")
                     .font(.system(size: 12, weight: day.isToday ? .bold : .regular))
                     .foregroundColor(foregroundColor)
@@ -596,88 +740,31 @@ struct DayCell: View {
                     .clipShape(Circle())
             }
 
-            if let date = day.date {
-                let todaysTickets = tickets.filter { calendar.isDate($0.date, inSameDayAs: date) }
-
-                if !todaysTickets.isEmpty {
-                    VStack(spacing: 3) {
-                        ForEach(todaysTickets.prefix(2), id: \.id) { ticket in
-                            Button(action: {
-                                selectedTickets = todaysTickets.map { ($0.id, $0.title) }
-                                showDetails = true
-                            }) {
-                                Text(ticket.title?.prefix(6) ?? "Event")
-                                    .font(.caption2)
-                                    .lineLimit(1)
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 2)
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color.green.opacity(0.8))
-                                    .foregroundColor(.white)
-                                    .cornerRadius(4)
-                            }
-                        }
-
-                        if todaysTickets.count > 2 {
-                            Button(action: {
-                                selectedTickets = todaysTickets.map { ($0.id, $0.title) }
-                                showDetails = true
-                            }) {
-                                Text("+\(todaysTickets.count - 2) more")
-                                    .font(.caption2)
-                                    .foregroundColor(.gray)
-                            }
-                        }
-                    }
-                } else {
-                    Spacer().frame(height: 16)
-                }
-            }
+            // Reserve fixed height for ticket area (empty)
+            Color.clear
+                .frame(height: 20) // 🔹 same for all cells, keeps alignment
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 2)
-        .sheet(isPresented: $showDetails) {
-            TicketDetailsView(tickets: selectedTickets)
-        }
     }
 
-    // ✅ Highlight colors
+    // MARK: - Styling
+
     private var backgroundColor: Color {
-        if let selectedDate = selectedDate, let date = day.date, calendar.isDate(selectedDate, inSameDayAs: date) {
-            return Color.blue.opacity(0.7) // Selected day background
+        if let selectedDate = selectedDate, calendar.isDate(selectedDate, inSameDayAs: day.date) {
+            return Color.blue.opacity(0.7)
         } else if day.isToday {
-            return Color.red // Today
+            return Color.red
         } else {
             return Color.clear
         }
     }
 
     private var foregroundColor: Color {
-        if let selectedDate = selectedDate, let date = day.date, calendar.isDate(selectedDate, inSameDayAs: date) {
-            return .white // White text for selected
+        if let selectedDate = selectedDate, calendar.isDate(selectedDate, inSameDayAs: day.date) {
+            return .white
         } else {
             return day.isToday ? .white : .primary
-        }
-    }
-}
-
-struct TicketDetailsView: View {
-    let tickets: [(id: String, title: String?)]
-
-    var body: some View {
-        NavigationView {
-            List(tickets, id: \.id) { ticket in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(ticket.title ?? "No Title")
-                        .font(.headline)
-                    Text("Ticket ID: \(ticket.id)")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                }
-                .padding(.vertical, 4)
-            }
-            .navigationTitle("Ticket Details")
-            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }

@@ -142,7 +142,7 @@ struct ChangePasswordView: View {
         let userId = UserDefaults.standard.string(forKey: "userId") ?? "123"
 
         // Make an async API request (replace URL with your backend)
-        let url = URL(string: "http://localhost:4200/api/employee/password/\(userId)")!
+        let url = URL(string: "\(Config.baseURL)/api/employee/password/\(userId)")!
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

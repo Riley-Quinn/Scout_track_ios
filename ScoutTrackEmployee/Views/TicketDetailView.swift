@@ -206,11 +206,10 @@ class TicketListViewModel: ObservableObject {
     @Published var tickets: [TicketDetail] = []
     @Published var isLoading = false
     private var cancellables = Set<AnyCancellable>()
-    let baseURL = "http://localhost:4200"
 
     func fetchAllTickets() {
         isLoading = true
-        guard let url = URL(string: "\(baseURL)/api/tickets") else { return }
+        guard let url = URL(string: "\(Config.baseURL)/api/tickets") else { return }
 
         if NetworkMonitor.shared.isConnected {
             URLSession.shared.dataTaskPublisher(for: url)
@@ -374,7 +373,6 @@ class TicketDetailViewModel: ObservableObject {
     @Published var refreshFlag = false
     @Published var isUploading = false
     private var cancellables = Set<AnyCancellable>()
-    let baseURL = "http://localhost:4200"
     private var userId: String {
         UserDefaults.standard.string(forKey: "userId") ?? "0"
     }
@@ -389,7 +387,7 @@ class TicketDetailViewModel: ObservableObject {
     func fetchTicketDetail(ticketId: Int) {
         isLoading = true
         if NetworkMonitor.shared.isConnected {
-            guard let url = URL(string: "\(baseURL)/api/tickets/\(ticketId)") else { return }
+            guard let url = URL(string: "\(Config.baseURL)/api/tickets/\(ticketId)") else { return }
             URLSession.shared.dataTaskPublisher(for: url)
                 .map(\.data)
                 .decode(type: TicketDetailResponse.self, decoder: JSONDecoder())
@@ -559,7 +557,7 @@ class TicketDetailViewModel: ObservableObject {
                                longitude: Double,
                                completion: @escaping () -> Void)
     {
-        guard let url = URL(string: "\(baseURL)/api/employee-uploads") else {
+        guard let url = URL(string: "\(Config.baseURL)/api/employee-uploads") else {
             return
         }
 
@@ -676,7 +674,7 @@ class TicketDetailViewModel: ObservableObject {
     }
 
     func sendMessage(ticketId: Int, message: String, completion: @escaping (Bool) -> Void) {
-        guard let url = URL(string: "\(baseURL)/api/tickets/\(ticketId)") else {
+        guard let url = URL(string: "\(Config.baseURL)/api/tickets/\(ticketId)") else {
             completion(false)
             return
         }

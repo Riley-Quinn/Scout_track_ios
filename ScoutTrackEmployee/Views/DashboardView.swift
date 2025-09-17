@@ -93,14 +93,6 @@ struct DashboardView: View {
                             StatusCard(title: "On Hold", count: viewModel.onHoldCount, color: .pink, icon: "clock")
                         }
 
-                        // Weekly Progress
-                        // WeeklyProgressView(
-                        //     weeklyCounts: viewModel.weeklyToDoCounts,
-                        //     closedCounts: [:]
-                        // )
-                        // .frame(maxWidth: .infinity)
-
-                        // Today Tickets Section
                         HStack {
                             Text("Today Tickets")
                                 .font(.headline)
@@ -116,6 +108,7 @@ struct DashboardView: View {
                         }
                         .hidden()
 
+                        // Inside your ScrollView -> Today Tickets section
                         if viewModel.isLoading {
                             ProgressView("Loading tickets...")
                         } else if viewModel.tickets.isEmpty {
@@ -123,33 +116,25 @@ struct DashboardView: View {
                                 .foregroundColor(.gray)
                                 .padding(.vertical, 4)
                         } else {
-                            VStack(spacing: 8) {
-                                ForEach(viewModel.tickets.prefix(3)) { ticket in
+                            // ✅ Replace VStack with LazyVGrid
+                            let columns: [GridItem] = Array(repeating: GridItem(.flexible(), spacing: 12), count: UIDevice.current.userInterfaceIdiom == .pad ? 2 : 1)
+
+                            LazyVGrid(columns: columns, spacing: 12) {
+                                ForEach(viewModel.tickets.prefix(6)) { ticket in
                                     NavigationLink(destination: TicketDetailView(ticketId: ticket.ticket_id)) {
                                         TicketCard(
                                             ticket: ticket,
                                             onAssign: { /* Logic */ },
-                                            onSetArrival: {
-                                                viewModel.selectedTicket = ticket
-                                                viewModel.arrivalDate = Date()
-                                                viewModel.showArrivalSheet = true
-                                            },
+                                            onSetArrival: { /* Logic */ },
                                             onStartWork: { viewModel.startWork(ticket: ticket) },
-                                            onServiceUpdate: {
-                                                viewModel.selectedTicket = ticket
-                                                viewModel.showServiceUpdateSheet = true
-                                            },
-                                            onEdit: {
-                                                viewModel.selectedTicket = ticket
-                                                viewModel.editStatus = ""
-                                                viewModel.editReason = ""
-                                                viewModel.showEditSheet = true
-                                            }
+                                            onServiceUpdate: { viewModel.selectedTicket = ticket; viewModel.showServiceUpdateSheet = true },
+                                            onEdit: { viewModel.selectedTicket = ticket; viewModel.showEditSheet = true }
                                         )
                                     }
                                     .buttonStyle(PlainButtonStyle())
                                 }
                             }
+                            .frame(maxWidth: .infinity) // ✅ Important for full width
                         }
                     }
                     .padding()

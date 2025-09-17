@@ -19,7 +19,6 @@ struct Ticket: Identifiable, Codable {
     let status_tracker: String?
     let title: String
     let employee_arrival_time: String?
-    
 }
 
 struct TicketListResponse: Decodable {

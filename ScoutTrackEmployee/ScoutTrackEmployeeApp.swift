@@ -9,11 +9,15 @@ struct ScoutTrackEmployeeApp: App {
     var body: some Scene {
         WindowGroup {
             if sessionActive {
-                DashboardView()
-                    .environment(\.managedObjectContext, persistenceController.container.viewContext)
+                NavigationView {
+                    DashboardView()
+                        .environment(\.managedObjectContext, persistenceController.container.viewContext)
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
             } else {
                 LoginView()
                     .environment(\.managedObjectContext, persistenceController.container.viewContext)
+                    .navigationViewStyle(StackNavigationViewStyle()) // Force full screen
             }
         }
     }

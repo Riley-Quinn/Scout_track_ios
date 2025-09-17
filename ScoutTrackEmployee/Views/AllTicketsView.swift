@@ -18,17 +18,13 @@ struct AllTicketsView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     // ✅ Tickets Section
-                    HStack {
-                        Text("Today Tickets")
-                            .font(.headline)
-                        Spacer()
-                    }
-                    .padding(.horizontal)
 
                     if viewModel.isLoading {
                         ProgressView("Loading tickets...")
                     } else {
-                        VStack(spacing: 12) {
+                        let columns: [GridItem] = Array(repeating: GridItem(.flexible(), spacing: 12), count: UIDevice.current.userInterfaceIdiom == .pad ? 2 : 1)
+
+                        LazyVGrid(columns: columns, spacing: 12) {
                             ForEach(viewModel.tickets) { ticket in
                                 NavigationLink(destination: TicketDetailView(ticketId: ticket.ticket_id)) {
                                     TicketCard(
@@ -51,6 +47,7 @@ struct AllTicketsView: View {
                                 .buttonStyle(PlainButtonStyle())
                             }
                         }
+                        .frame(maxWidth: .infinity) // ✅ Important for full width
                     }
                 }
                 .padding()
