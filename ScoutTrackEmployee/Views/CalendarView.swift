@@ -28,7 +28,6 @@ struct CalendarView: View {
         var id: String { ticket_id }
         var date: Date {
             guard let dateStr = employee_arrival_date else {
-                print("❌ No employee_arrival_date for ticket \(ticket_id)")
                 return Date.distantFuture
             }
 
@@ -52,7 +51,6 @@ struct CalendarView: View {
             }
 
             guard let parsedDate = baseDate else {
-                print("❌ Failed to parse date: \(dateStr) for ticket \(ticket_id)")
                 return Date.distantFuture
             }
 
@@ -109,7 +107,6 @@ struct CalendarView: View {
     @State private var tickets: [CalendarTicket] = []
     private let calendar = Calendar.current
 
-    // ✅ Debug formatter for printing dates in local timezone
     private let debugFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd HH:mm"

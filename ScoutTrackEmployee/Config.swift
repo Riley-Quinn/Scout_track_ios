@@ -1,5 +1,5 @@
 import Foundation
 
-struct Config {
+enum Config {
     static let baseURL = "http://localhost:4200"
 }

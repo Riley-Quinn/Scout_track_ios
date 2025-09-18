@@ -32,22 +32,6 @@ class DashboardViewModel: ObservableObject {
     }
 
     private let context = PersistenceController.shared.container.viewContext
-    // var hasPreAndPostUploads: Bool {
-//     guard let ticket = selectedTicket else {
-//         print("❌ selectedTicket is nil")
-//         return false
-//     }
-
-//     let preCount = ticket.employee_pre_uploads.count
-//     let postCount = ticket.employee_post_uploads.count
-
-//     print("🔍 Checking uploads for ticket \(ticket.ticket_id)")
-//     print("   Pre uploads: \(preCount)")
-//     print("   Post uploads: \(postCount)")
-
-//     return preCount > 0 && postCount > 0
-    // }
-
     // Possible statuses for edit
     let editStatuses = ["Done", "On Hold", "Pending"]
 
@@ -73,8 +57,6 @@ class DashboardViewModel: ObservableObject {
         }
 
         isLoading = true
-        print("📡 Fetching tickets for userId:", userId, "Only today:", onlyToday)
-
         URLSession.shared.dataTaskPublisher(for: url)
             .map { $0.data }
             .decode(type: TicketListResponse.self, decoder: JSONDecoder())
@@ -145,13 +127,10 @@ class DashboardViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { [weak self] completion in
                 if case let .failure(error) = completion {
-                    print("❌ Fetch tickets failed:", error)
                     self?.loadOfflineTickets()
                     self?.isLoading = false
                 }
             }, receiveValue: { [weak self] (tickets: [Ticket]) in
-                print("✅ Tickets fetched:", tickets.count)
-
                 var dayWiseToDo: [String: Int] = [:]
 
                 for ticket in tickets {
@@ -190,12 +169,10 @@ class DashboardViewModel: ObservableObject {
 
     func fetchAllTickets() {
         guard let url = URL(string: "\(Config.baseURL)/api/tickets/employee/\(userId)") else {
-            print("❌ Invalid URL")
             return
         }
 
         isLoading = true
-        print("📡 Fetching tickets for userId:", userId)
 
         URLSession.shared.dataTaskPublisher(for: url)
             .map { $0.data }
@@ -225,34 +202,24 @@ class DashboardViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { [weak self] completion in
                 if case let .failure(error) = completion {
-                    print("❌ Fetch tickets failed:", error)
                     self?.loadOfflineTickets()
                     self?.isLoading = false
                 }
             }, receiveValue: { [weak self] (tickets: [Ticket]) in
-                print("✅ Tickets fetched:", tickets.count)
                 var dayWiseToDo: [String: Int] = [:]
 
                 for ticket in tickets {
-                    print("🔹 Ticket ID:", ticket.ticket_id, "Title:", ticket.title)
-
                     guard let trackerStr = ticket.status_tracker,
                           let data = trackerStr.data(using: .utf8),
                           let trackerArrayAny = try? JSONSerialization.jsonObject(with: data),
                           let trackerArray = trackerArrayAny as? [[String: Any]]
                     else {
-                        print("⚠️ No status_tracker or invalid JSON for ticket", ticket.ticket_id)
                         continue
                     }
-
-                    print("📄 Tracker array:", trackerArray)
-
                     if let todoEntry = trackerArray.first(where: {
                         guard let status = $0["status"] as? String else { return false }
                         return status.lowercased() == "todo" || status.lowercased() == "to do"
                     }) {
-                        print("✅ Found TODO entry:", todoEntry)
-
                         // ✅ Try timestamp first, then fallback to "Date"
                         if let dateStr = (todoEntry["timestamp"] as? String) ?? (todoEntry["Date"] as? String) {
                             let isoFormatter = ISO8601DateFormatter()
@@ -263,20 +230,10 @@ class DashboardViewModel: ObservableObject {
                             if let date = isoFormatter.date(from: dateStr) ?? dateFormatter.date(from: dateStr) {
                                 let dayKey = DateFormatter.shortDate.string(from: date)
                                 dayWiseToDo[dayKey, default: 0] += 1
-                                print("📅 Count updated for", dayKey, ":", dayWiseToDo[dayKey]!)
-                            } else {
-                                print("❌ Could not parse TODO date string:", dateStr)
-                            }
-                        } else {
-                            print("⚠️ No timestamp or Date found for TODO entry:", todoEntry)
-                        }
-                    } else {
-                        print("⚠️ No TODO status in tracker for ticket", ticket.ticket_id)
-                    }
+                            } 
+                        } 
+                    } 
                 }
-
-                print("🗓 Final dayWiseToDo dict:", dayWiseToDo)
-
                 let todayKey = DateFormatter.shortDate.string(from: Date())
                 self?.tickets = tickets
                 self?.todoCount = dayWiseToDo[todayKey] ?? 0
@@ -363,7 +320,6 @@ class DashboardViewModel: ObservableObject {
             let bodyData = try JSONSerialization.data(withJSONObject: body, options: [])
             request.httpBody = bodyData
         } catch {
-            print("JSON Error:", error)
             return
         }
 
@@ -371,9 +327,7 @@ class DashboardViewModel: ObservableObject {
             DispatchQueue.main.async {
                 if let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) {
                     self?.fetchTickets()
-                } else {
-                    print("Failed to update status")
-                }
+                } 
             }
         }.resume()
     }
@@ -420,9 +374,7 @@ class DashboardViewModel: ObservableObject {
                     self?.showServiceUpdateSheet = false
                     self?.serviceReason = ""
                     self?.customServiceReason = ""
-                } else {
-                    print("❌ Service update failed")
-                }
+                } 
             }
         }.resume()
     }

@@ -116,7 +116,7 @@ struct LoginView: View {
 
         isLoading = true
 
-        let url = URL(string:"\(Config.baseURL)/api/auth/admin/login")!
+        let url = URL(string: "\(Config.baseURL)/api/auth/admin/login")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

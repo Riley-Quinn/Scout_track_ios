@@ -41,8 +41,6 @@ final class PhotoAlbumManager {
 
     func saveImage(_ image: UIImage, ticketId: Int, completion: @escaping (Bool, PHAsset?) -> Void) {
         let albumName = "Ticket_\(ticketId)"
-        print("📌 [PhotoAlbumManager] Saving image to album: \(albumName)")
-
         func createAlbumIfNeeded(albumName: String, completion: @escaping (PHAssetCollection?) -> Void) {
             let fetch = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
             var album: PHAssetCollection?
@@ -54,20 +52,16 @@ final class PhotoAlbumManager {
             }
 
             if let album = album {
-                print("✅ [PhotoAlbumManager] Album exists: \(album.localizedTitle ?? "")")
                 completion(album)
             } else {
-                print("⚠️ [PhotoAlbumManager] Album not found. Creating...")
                 var albumPlaceholder: PHObjectPlaceholder?
                 PHPhotoLibrary.shared().performChanges({
                     let request = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: albumName)
                     albumPlaceholder = request.placeholderForCreatedAssetCollection
                 }) { _, error in
                     if let error = error {
-                        print("❌ [PhotoAlbumManager] Failed to create album: \(error.localizedDescription)")
                         completion(nil)
                     } else {
-                        print("✅ [PhotoAlbumManager] Album created successfully")
                         if let placeholder = albumPlaceholder {
                             let fetchResult = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [placeholder.localIdentifier], options: nil)
                             completion(fetchResult.firstObject)
@@ -93,7 +87,6 @@ final class PhotoAlbumManager {
                 }
             }) { success, error in
                 if let error = error { print("❌ [PhotoAlbumManager] Failed to save image: \(error.localizedDescription)") }
-                print("📌 [PhotoAlbumManager] Image save success: \(success)")
                 completion(success, assetPlaceholder.flatMap { PHAsset.fetchAssets(withLocalIdentifiers: [$0.localIdentifier], options: nil).firstObject })
             }
         }
@@ -104,7 +97,6 @@ final class PhotoAlbumManager {
             PHAssetChangeRequest.deleteAssets([asset] as NSArray)
         }) { success, error in
             if let error = error { print("❌ [PhotoAlbumManager] Failed to delete asset: \(error.localizedDescription)") }
-            print("📌 [PhotoAlbumManager] Delete success: \(success)")
             completion(success)
         }
     }
@@ -273,15 +265,51 @@ struct TicketDetailResponse: Decodable {
     let list: TicketDetail?
 }
 
-struct Multimedia: Codable {
-    let file_name: String
-    let file_type: String
-    let file_path: String
+struct Multimedia: Codable, Identifiable {
     let multimedia_id: Int
+    let file_name: String
+    let file_path: String
+    let file_type: String
+    let latitude: String?
+    let longitude: String?
     let media_stage: String?
-    let uploaded_by: Int
-    let longitude: String
-    let latitude: String
+    let offline_employee_id: Int?
+    let uploaded_by: Int?
+
+    var id: Int { multimedia_id }
+
+    enum CodingKeys: String, CodingKey {
+        case multimedia_id, file_name, file_path, file_type, latitude, longitude, media_stage, offline_employee_id, uploaded_by
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        multimedia_id = try container.decode(Int.self, forKey: .multimedia_id)
+        file_name = try container.decode(String.self, forKey: .file_name)
+        file_path = try container.decode(String.self, forKey: .file_path)
+        file_type = try container.decode(String.self, forKey: .file_type)
+
+        latitude = try? container.decodeIfPresent(String.self, forKey: .latitude)
+        longitude = try? container.decodeIfPresent(String.self, forKey: .longitude)
+
+        // Normalize media_stage
+        let stageRaw = (try? container.decodeIfPresent(String.self, forKey: .media_stage)) ?? ""
+        media_stage = stageRaw.lowercased() == "<null>" ? nil : stageRaw
+
+        // Handle optional Int or null string for uploaded_by
+        if let intVal = try? container.decodeIfPresent(Int.self, forKey: .uploaded_by) {
+            uploaded_by = intVal
+        } else if let strVal = try? container.decodeIfPresent(String.self, forKey: .uploaded_by),
+                  strVal.lowercased() != "<null>"
+        {
+            uploaded_by = Int(strVal)
+        } else {
+            uploaded_by = nil
+        }
+
+        offline_employee_id = try? container.decodeIfPresent(Int.self, forKey: .offline_employee_id)
+    }
 }
 
 struct TicketDetail: Codable {
@@ -306,7 +334,7 @@ struct TicketDetail: Codable {
     var customer_comments: String?
     let customer_type: String?
     let customer_division: String?
-    let employee_arrival_date: String
+    let employee_arrival_date: String?
     var employee_pre_uploads: [Multimedia] {
         multimedia?.filter { ($0.media_stage ?? "").lowercased() == "pre" } ?? []
     }
@@ -475,7 +503,6 @@ struct TicketChatView: View {
         do {
             comments = try JSONDecoder().decode([CustomerComment].self, from: data)
         } catch {
-            print("Failed to parse customer comments: \(error)")
             comments = []
         }
     }
@@ -587,7 +614,6 @@ class TicketDetailViewModel: ObservableObject {
         } else {
             history = []
         }
-        print("📦 Loaded ticket \(ticketId) from CoreData with \(cached.multimedia?.count ?? 0) media items")
         isLoading = false
     }
 
@@ -640,14 +666,11 @@ class TicketDetailViewModel: ObservableObject {
 
     private func uploadImageOffline(image: UIImage, type: String, latitude: Double, longitude: Double) {
         guard let ticketId = ticket?.ticket_id else { return }
-        print("📌 [TicketDetailViewModel] Starting offline upload for ticket: \(ticketId), type: \(type)")
 
         PhotoAlbumManager.shared.saveImage(image, ticketId: ticketId) { success, asset in
             guard success, let asset = asset else {
-                print("❌ [TicketDetailViewModel] Offline image save failed")
                 return
             }
-            print("✅ [TicketDetailViewModel] Image saved offline, asset id: \(asset.localIdentifier)")
 
             // Save local upload record (mark as pending)
             let localUpload = LocalUpload(
@@ -741,7 +764,6 @@ class TicketDetailViewModel: ObservableObject {
                 // Optionally log server error
                 if let data = data, !data.isEmpty {
                     let text = String(data: data, encoding: .utf8) ?? "<non-utf8 \(data.count) bytes>"
-                    print("Upload failed response:", text)
                 }
                 DispatchQueue.main.async {
                     completion()
@@ -758,7 +780,6 @@ class TicketDetailViewModel: ObservableObject {
             // Fetch PHAsset instead of treating path as file
             let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [upload.localFilePath], options: nil)
             guard let asset = fetchResult.firstObject else {
-                print("❌ No PHAsset found for id \(upload.localFilePath)")
                 UploadStore.shared.markAsFailed(upload)
                 continue
             }
@@ -786,7 +807,6 @@ class TicketDetailViewModel: ObservableObject {
                         self.fetchTicketDetail(ticketId: upload.ticketId)
                     }
                 } else {
-                    print("❌ Could not read image data from asset")
                     UploadStore.shared.markAsFailed(upload)
                 }
             }
@@ -863,7 +883,6 @@ extension TicketDetailViewModel {
                 self.isUploading = false
 
                 if let error = error {
-                    print("Failed to send message: \(error)")
                     completion(false)
                     return
                 }
@@ -982,15 +1001,15 @@ struct TicketDetailView: View {
                             .frame(maxHeight: 350) // allows scrolling if content exceeds 350
                             if ["in-progress", "on-hold", "pending"].contains(ticket.status_name.lowercased()) {
                                 SectionHeader(title: "Chat with customer")
-                                 ScrollView(.vertical, showsIndicators: true) {
-                                TicketChatView(customerCommentsJSON: Binding(
-                                    get: { viewModel.ticket?.customer_comments ?? "" },
-                                    set: { newValue in
-                                        viewModel.ticket?.customer_comments = newValue
-                                    }
-                                ))
-                                 }
-                                 .frame(maxHeight: 350)
+                                ScrollView(.vertical, showsIndicators: true) {
+                                    TicketChatView(customerCommentsJSON: Binding(
+                                        get: { viewModel.ticket?.customer_comments ?? "" },
+                                        set: { newValue in
+                                            viewModel.ticket?.customer_comments = newValue
+                                        }
+                                    ))
+                                }
+                                .frame(maxHeight: 350)
                                 HStack {
                                     TextField("Type a message...", text: $newMessage)
                                         .padding(8)
@@ -1009,8 +1028,7 @@ struct TicketDetailView: View {
                                     }
                                     .disabled(newMessage.isEmpty || viewModel.isUploading)
                                 }
-                                .padding()                           
-                             
+                                .padding()
                             }
                         }
                     }
@@ -1105,6 +1123,7 @@ struct TicketDetailView: View {
         }
     }
 }
+
 private extension TicketDetailView {
     func sendMessage() {
         let textToSend = newMessage
@@ -1112,12 +1131,12 @@ private extension TicketDetailView {
 
         viewModel.sendMessage(textToSend) { success in
             if !success {
-                print("Failed to send message")
                 newMessage = textToSend // Restore on failure
             }
         }
     }
 }
+
 struct ServiceUpdateSheetTicket: View {
     @ObservedObject var viewModel: DashboardViewModel
 
@@ -1161,6 +1180,7 @@ struct ServiceUpdateSheetTicket: View {
         .padding()
     }
 }
+
 struct EditTicketSheetTicket: View {
     @ObservedObject var viewModel: DashboardViewModel
     // @State private var showUploadAlert = false // 🔔 State for alert
@@ -1213,7 +1233,7 @@ struct TicketActionButtons: View {
                 }
                 .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)))
             } else if ticket.status_id == 2 {
-                if !ticket.employee_arrival_date.isEmpty {
+                if !(ticket.employee_arrival_date ?? "").isEmpty {
                     Button("Start") { onStartWork?() }
                         .buttonStyle(ActionButtonStyle(color: .blue))
                 }
@@ -1247,6 +1267,7 @@ struct TicketHeader: View {
         .ignoresSafeArea(edges: .top)
     }
 }
+
 struct TicketInfo: View {
     let ticket: TicketDetail
     var body: some View {
@@ -1256,6 +1277,7 @@ struct TicketInfo: View {
         }.padding(.horizontal)
     }
 }
+
 struct CustomerInfoView: View {
     let ticket: TicketDetail
     @Binding var showCustomerDetails: Bool
@@ -1394,6 +1416,7 @@ struct CustomerInfoView: View {
         }
     }
 }
+
 struct TicketDetailSection: View {
     let ticket: TicketDetail
 
@@ -1413,7 +1436,9 @@ struct TicketDetailSection: View {
         }
     }
 }
+
 // MARK: - Helper Views and Functions
+
 func statusColor(_ status: String) -> Color {
     switch status.lowercased() {
     case "todo", "to do": return .orange
@@ -1424,6 +1449,7 @@ func statusColor(_ status: String) -> Color {
     default: return .gray
     }
 }
+
 struct DetailRow: View {
     let label: String
     let value: String
@@ -1438,6 +1464,7 @@ struct DetailRow: View {
         }
     }
 }
+
 struct UploadsGrid: View {
     var serverMedia: [Multimedia]
     var localMedia: [LocalUpload]
@@ -1446,23 +1473,28 @@ struct UploadsGrid: View {
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 12) {
             // 🔹 Server media
+            // 🔹 Server media
             ForEach(serverMedia, id: \.multimedia_id) { media in
                 VStack {
                     RemoteImageView(url: media.file_name)
                         .frame(width: 100, height: 100)
                         .cornerRadius(8)
 
-                    // Display address under image
-
-                    Text(addresses[media.multimedia_id] ?? "Loading...")
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                        .multilineTextAlignment(.center)
-                        .onAppear {
-                            LocationHelper.shared.getAddress(latitude: media.latitude, longitude: media.longitude) { address in
-                                addresses[media.multimedia_id] = address
+                    if let lat = media.latitude,
+                       let lon = media.longitude,
+                       !lat.isEmpty, !lon.isEmpty
+                    {
+                        // Only show address if coords exist
+                        Text(addresses[media.multimedia_id] ?? "Loading...")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .onAppear {
+                                LocationHelper.shared.getAddress(latitude: lat, longitude: lon) { address in
+                                    addresses[media.multimedia_id] = address
+                                }
                             }
-                        }
+                    } 
                 }
             }
 
@@ -1519,6 +1551,7 @@ struct UploadsGrid: View {
         .padding(.vertical)
     }
 }
+
 struct SectionHeader: View {
     var title: String
     var showPlus: Bool = false
@@ -1534,6 +1567,7 @@ struct SectionHeader: View {
         .foregroundColor(.white)
     }
 }
+
 struct HistoryRow: View {
     var status: String
     var employee: String
@@ -1554,6 +1588,7 @@ struct HistoryRow: View {
         }
     }
 }
+
 func openInMaps(address: String) {
     // Encode the address for URL
     let query = address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
@@ -1567,6 +1602,7 @@ func openInMaps(address: String) {
         UIApplication.shared.open(appleURL)
     }
 }
+
 class LocationManager: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private var completion: ((CLLocationCoordinate2D?) -> Void)?
@@ -1633,6 +1669,7 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
         }
     }
 }
+
 struct RemoteImageView: View {
     let url: String
     private let baseURL = "https://d3shribgms6bz4.cloudfront.net/"

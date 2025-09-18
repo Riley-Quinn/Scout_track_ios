@@ -431,7 +431,6 @@ struct TicketCard: View {
 
     private func isToday(_ dateString: String?) -> Bool {
         guard let dateString = dateString else {
-            print("⚠️ Date string is nil")
             return false
         }
 
@@ -440,10 +439,8 @@ struct TicketCard: View {
 
         if let date = isoFormatter.date(from: dateString) {
             let result = Calendar.current.isDateInToday(date)
-            print("📅 Parsed date: \(date) | isToday = \(result)")
             return result
         } else {
-            print("❌ Failed to parse ISO8601 date: \(dateString)")
             return false
         }
     }

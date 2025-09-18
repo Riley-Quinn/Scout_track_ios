@@ -31,7 +31,6 @@ class LocationHelper {
                 self.cache[key] = finalAddress
                 completion(finalAddress)
             } else if let error = error {
-                print("Reverse geocode error: \(error.localizedDescription)")
                 completion("Address not found")
             } else {
                 completion("Address not found")

@@ -211,8 +211,6 @@ struct EventView: View {
             }
         }
 
-        // Debug: print the actual string to see what we're getting
-        print("Unable to parse time from: '\(dateString)'")
         return "Not Available"
     }
 
@@ -267,7 +265,7 @@ struct EventView: View {
         HStack(alignment: .top) {
             Text(label)
                 .bold()
-                .font(.system(size: 10))
+                .font(.system(size: 12))
                 .frame(width: 80, alignment: .leading)
 
             value() // <-- this will render BlinkText, Link, Text, etc.
@@ -336,11 +334,6 @@ struct EventView: View {
                 guard let data = data else {
                     errorMessage = "No data received"
                     return
-                }
-
-                // Debug raw response
-                if let rawString = String(data: data, encoding: .utf8) {
-                    print("API Response: \(rawString)")
                 }
 
                 do {

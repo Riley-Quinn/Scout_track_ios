@@ -12,8 +12,6 @@ class SyncManager {
         isSyncing = true
 
         let pendingUploads = UploadStore.shared.pending
-        print("🔄 Found \(pendingUploads.count) pending uploads")
-
         for upload in pendingUploads {
             uploadToServer(upload) { success in
                 if success {
@@ -65,15 +63,12 @@ class SyncManager {
 
         URLSession.shared.dataTask(with: request) { _, response, error in
             if let error = error {
-                print("❌ Upload failed: \(error)")
                 completion(false)
                 return
             }
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                print("✅ Upload success for \(upload.offlineEmployeeId)")
                 completion(true)
             } else {
-                print("⚠️ Upload failed, server error")
                 completion(false)
             }
         }.resume()
