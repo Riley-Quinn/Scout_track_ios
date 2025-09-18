@@ -303,7 +303,7 @@ struct TicketDetail: Codable {
     let title: String
     let multimedia: [Multimedia]?
     let status_tracker: String?
-    let customer_comments: String?
+    var customer_comments: String?
     let customer_type: String?
     let customer_division: String?
     let employee_arrival_date: String
@@ -332,17 +332,153 @@ struct StatusTracker: Decodable {
     let timestamp: String?
 }
 
-struct CustomerCommentWrapper: Codable {
-    let message: CustomerComment
-}
-
-struct CustomerComment: Codable, Identifiable {
+struct CustomerComment: Identifiable, Codable {
     let id: String
     let text: String
-    let sender_id: String
-    let sender_role: String
-    let sender_name: String
+    let senderId: Int
+    let senderRole: String
+    let senderName: String
     let date: String
+    init(id: String, text: String, senderId: Int, senderRole: String, senderName: String, date: String) {
+        self.id = id
+        self.text = text
+        self.senderId = senderId
+        self.senderRole = senderRole
+        self.senderName = senderName
+        self.date = date
+    }
+
+    // MARK: - Identifiable
+
+    var idValue: String { id } // use idValue if needed
+
+    // MARK: - Custom decoder to handle nested "message" or top-level
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let messageContainer = try? container.nestedContainer(keyedBy: CodingKeys.self, forKey: .message) {
+            id = try messageContainer.decode(String.self, forKey: .id)
+            text = try messageContainer.decode(String.self, forKey: .text)
+            senderId = try messageContainer.decode(Int.self, forKey: .senderId)
+            senderRole = try messageContainer.decode(String.self, forKey: .senderRole)
+            senderName = try messageContainer.decode(String.self, forKey: .senderName)
+            date = try messageContainer.decode(String.self, forKey: .date)
+        } else {
+            id = try container.decode(String.self, forKey: .id)
+            text = try container.decode(String.self, forKey: .text)
+            senderId = try container.decode(Int.self, forKey: .senderId)
+            senderRole = try container.decode(String.self, forKey: .senderRole)
+            senderName = try container.decode(String.self, forKey: .senderName)
+            date = try container.decode(String.self, forKey: .date)
+        }
+    }
+
+    // MARK: - Custom encoder
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(text, forKey: .text)
+        try container.encode(senderId, forKey: .senderId)
+        try container.encode(senderRole, forKey: .senderRole)
+        try container.encode(senderName, forKey: .senderName)
+        try container.encode(date, forKey: .date)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, text, date, message
+        case senderId = "sender_id"
+        case senderRole = "sender_role"
+        case senderName = "sender_name"
+    }
+}
+
+// MARK: - Chat Bubble View
+
+struct ChatBubble: View {
+    let comment: CustomerComment
+    let isCurrentUser: Bool
+
+    var body: some View {
+        HStack {
+            if isCurrentUser { Spacer() }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(comment.text)
+                    .padding(10)
+                    .background(isCurrentUser ? Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255) : Color.gray.opacity(0.2))
+                    .foregroundColor(isCurrentUser ? .white : .black)
+                    .cornerRadius(12)
+
+                Text("\(comment.senderName) (\(comment.senderRole))")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+
+                if let date = parseDate(comment.date) {
+                    Text(formatDate(date))
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
+            }
+            .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: isCurrentUser ? .trailing : .leading)
+
+            if !isCurrentUser { Spacer() }
+        }
+    }
+
+    private func parseDate(_ str: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM dd, yyyy, hh:mm a"
+        formatter.locale = Locale(identifier: "en_US")
+        return formatter.date(from: str)
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d yyyy h:mm a"
+        return formatter.string(from: date)
+    }
+}
+
+// MARK: - Ticket Chat View
+
+struct TicketChatView: View {
+    @Binding var customerCommentsJSON: String?
+    @State private var comments: [CustomerComment] = []
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                ForEach(comments) { comment in
+                    ChatBubble(comment: comment, isCurrentUser: comment.senderRole.lowercased() == "employee")
+                }
+            }
+            .padding()
+            .onChange(of: customerCommentsJSON) { _ in
+                parseComments()
+            }
+            .onAppear {
+                parseComments()
+            }
+        }
+    }
+
+    private func parseComments() {
+        guard let jsonString = customerCommentsJSON,
+              let data = jsonString.data(using: .utf8)
+        else {
+            comments = []
+            return
+        }
+
+        do {
+            comments = try JSONDecoder().decode([CustomerComment].self, from: data)
+        } catch {
+            print("Failed to parse customer comments: \(error)")
+            comments = []
+        }
+    }
 }
 
 // MARK: - ViewModel
@@ -368,7 +504,7 @@ final class NetworkMonitor: ObservableObject {
 class TicketDetailViewModel: ObservableObject {
     @Published var ticket: TicketDetail?
     @Published var history: [StatusTracker] = []
-    @Published var chatMessages: [CustomerComment] = []
+
     @Published var isLoading = false
     @Published var refreshFlag = false
     @Published var isUploading = false
@@ -417,14 +553,6 @@ class TicketDetailViewModel: ObservableObject {
                         self.history = []
                     }
 
-                    // Decode customer comments JSON
-                    if let jsonData = ticket.customer_comments?.data(using: .utf8) {
-                        let wrapper = (try? JSONDecoder().decode([CustomerCommentWrapper].self, from: jsonData)) ?? []
-                        self.chatMessages = wrapper.map { $0.message }
-                    } else {
-                        self.chatMessages = []
-                    }
-
                     // Optional: Pretty print JSON for debugging
                     do {
                         let encoder = JSONEncoder()
@@ -448,7 +576,7 @@ class TicketDetailViewModel: ObservableObject {
         guard let cached = CoreDataManager.shared.load(ticketId: ticketId) else {
             ticket = nil
             history = []
-            chatMessages = []
+
             return
         }
 
@@ -459,14 +587,6 @@ class TicketDetailViewModel: ObservableObject {
         } else {
             history = []
         }
-
-        if let jsonData = cached.customer_comments?.data(using: .utf8) {
-            let wrapper = (try? JSONDecoder().decode([CustomerCommentWrapper].self, from: jsonData)) ?? []
-            chatMessages = wrapper.map { $0.message }
-        } else {
-            chatMessages = []
-        }
-
         print("📦 Loaded ticket \(ticketId) from CoreData with \(cached.multimedia?.count ?? 0) media items")
         isLoading = false
     }
@@ -672,61 +792,7 @@ class TicketDetailViewModel: ObservableObject {
             }
         }
     }
-
-    func sendMessage(ticketId: Int, message: String, completion: @escaping (Bool) -> Void) {
-        guard let url = URL(string: "\(Config.baseURL)/api/tickets/\(ticketId)") else {
-            completion(false)
-            return
-        }
-
-        // 1. Start with the existing chat messages
-        var updatedMessages = chatMessages
-
-        // 2. Create a new message
-        let newMsg = CustomerComment(
-            id: UUID().uuidString,
-            text: message,
-            sender_id: userId,
-            sender_role: "employee",
-            sender_name: "Me",
-            date: ISO8601DateFormatter().string(from: Date())
-        )
-        updatedMessages.append(newMsg)
-
-        // 3. Encode the chat payload
-        let wrappedMessages = updatedMessages.map { CustomerCommentWrapper(message: $0) }
-        guard let encoded = try? JSONEncoder().encode(wrappedMessages),
-              let jsonString = String(data: encoded, encoding: .utf8)
-        else {
-            completion(false)
-            return
-        }
-
-        let ticketData: [String: Any] = [
-            "customer_comments": jsonString,
-        ]
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["ticketData": ticketData])
-
-        // 4. Perform API call
-        URLSession.shared.dataTask(with: request) { _, response, _ in
-            DispatchQueue.main.async {
-                if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                    // Update the local messages so UI refreshes instantly
-                    self.chatMessages = updatedMessages
-                    completion(true)
-                } else {
-                    completion(false)
-                }
-            }
-        }.resume()
-    }
 }
-
-// MARK: - ImagePicker
 
 struct ImagePicker: UIViewControllerRepresentable {
     @Environment(\.presentationMode) private var presentationMode
@@ -752,6 +818,79 @@ struct ImagePicker: UIViewControllerRepresentable {
             }
             parent.presentationMode.wrappedValue.dismiss()
         }
+    }
+}
+
+extension TicketDetailViewModel {
+    func sendMessage(_ text: String, completion: @escaping (Bool) -> Void) {
+        guard var ticket = ticket else {
+            completion(false)
+            return
+        }
+
+        let newComment = CustomerComment(
+            id: "conv-\(Int(Date().timeIntervalSince1970))",
+            text: text,
+            senderId: Int(userId) ?? 0,
+            senderRole: "employee", // Adjust according to role
+            senderName: UserDefaults.standard.string(forKey: "name") ?? "Unknown",
+            date: formattedCurrentDate()
+        )
+
+        // Append to existing comments
+        var updatedComments = decodeComments(ticket.customer_comments)
+        updatedComments.append(newComment)
+
+        // Convert back to JSON string for backend
+        guard let jsonData = try? JSONEncoder().encode(updatedComments),
+              let jsonString = String(data: jsonData, encoding: .utf8)
+        else {
+            completion(false)
+            return
+        }
+
+        let url = URL(string: "\(Config.baseURL)/api/tickets/\(ticket.ticket_id)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = ["ticketData": ["customer_comments": jsonString]]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        isUploading = true
+
+        URLSession.shared.dataTask(with: request) { _, _, error in
+            DispatchQueue.main.async {
+                self.isUploading = false
+
+                if let error = error {
+                    print("Failed to send message: \(error)")
+                    completion(false)
+                    return
+                }
+
+                // Update local ticket and comments
+                ticket.customer_comments = jsonString
+                self.ticket = ticket
+                CoreDataManager.shared.save(ticket: ticket)
+                completion(true)
+            }
+        }.resume()
+    }
+
+    private func decodeComments(_ jsonString: String?) -> [CustomerComment] {
+        guard let jsonString = jsonString,
+              let data = jsonString.data(using: .utf8),
+              let comments = try? JSONDecoder().decode([CustomerComment].self, from: data)
+        else {
+            return []
+        }
+        return comments
+    }
+
+    private func formattedCurrentDate() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM dd, yyyy, hh:mm a"
+        return formatter.string(from: Date())
     }
 }
 
@@ -841,41 +980,37 @@ struct TicketDetailView: View {
                                 .padding(.horizontal)
                             }
                             .frame(maxHeight: 350) // allows scrolling if content exceeds 350
-
-                            // Chat
                             if ["in-progress", "on-hold", "pending"].contains(ticket.status_name.lowercased()) {
-                                SectionHeader(title: "Chat with customer", showClose: true)
-
-                                VStack(alignment: .leading, spacing: 12) {
-                                    ForEach(viewModel.chatMessages, id: \.id) { msg in
-                                        ChatBubble(text: msg.text,
-                                                   time: msg.date,
-                                                   isSender: msg.sender_role == "employee")
+                                SectionHeader(title: "Chat with customer")
+                                 ScrollView(.vertical, showsIndicators: true) {
+                                TicketChatView(customerCommentsJSON: Binding(
+                                    get: { viewModel.ticket?.customer_comments ?? "" },
+                                    set: { newValue in
+                                        viewModel.ticket?.customer_comments = newValue
                                     }
-                                }
-                                .padding(.horizontal)
-
+                                ))
+                                 }
+                                 .frame(maxHeight: 350)
                                 HStack {
-                                    TextField("Type your message...", text: $newMessage)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    TextField("Type a message...", text: $newMessage)
+                                        .padding(8)
+                                        .background(Color(.systemGray6))
+                                        .cornerRadius(8)
 
-                                    Button("Send") {
-                                        let text = newMessage.trimmingCharacters(in: .whitespacesAndNewlines)
-                                        guard !text.isEmpty else { return }
-                                        viewModel.sendMessage(ticketId: ticketId, message: text) { success in
-                                            if success {
-                                                newMessage = ""
-                                            }
-                                        }
+                                    Button(action: {
+                                        sendMessage()
+                                    }) {
+                                        Text("Send")
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(newMessage.isEmpty ? Color.gray : Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
+                                            .cornerRadius(12)
                                     }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(newMessage.isEmpty ? Color.gray : Color.green)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(8)
-                                    .disabled(newMessage.isEmpty)
+                                    .disabled(newMessage.isEmpty || viewModel.isUploading)
                                 }
-                                .padding()
+                                .padding()                           
+                             
                             }
                         }
                     }
@@ -909,7 +1044,6 @@ struct TicketDetailView: View {
             .onReceive(NotificationCenter.default.publisher(for: .syncStatusChanged)) { _ in
                 viewModel.refreshFlag.toggle()
             }
-
             // Upload confirmation preview
             if showConfirmUpload, let img = pickedImage, let type = uploadType {
                 VStack {
@@ -953,7 +1087,6 @@ struct TicketDetailView: View {
                 .frame(maxWidth: 300) // 👈 small fixed width
                 .frame(maxHeight: 350)
             }
-
             // This is inside the ZStack now
             if viewModel.isUploading {
                 Color.black.opacity(0.3).ignoresSafeArea()
@@ -972,7 +1105,19 @@ struct TicketDetailView: View {
         }
     }
 }
+private extension TicketDetailView {
+    func sendMessage() {
+        let textToSend = newMessage
+        newMessage = ""
 
+        viewModel.sendMessage(textToSend) { success in
+            if !success {
+                print("Failed to send message")
+                newMessage = textToSend // Restore on failure
+            }
+        }
+    }
+}
 struct ServiceUpdateSheetTicket: View {
     @ObservedObject var viewModel: DashboardViewModel
 
@@ -1016,7 +1161,6 @@ struct ServiceUpdateSheetTicket: View {
         .padding()
     }
 }
-
 struct EditTicketSheetTicket: View {
     @ObservedObject var viewModel: DashboardViewModel
     // @State private var showUploadAlert = false // 🔔 State for alert
@@ -1103,7 +1247,6 @@ struct TicketHeader: View {
         .ignoresSafeArea(edges: .top)
     }
 }
-
 struct TicketInfo: View {
     let ticket: TicketDetail
     var body: some View {
@@ -1113,7 +1256,6 @@ struct TicketInfo: View {
         }.padding(.horizontal)
     }
 }
-
 struct CustomerInfoView: View {
     let ticket: TicketDetail
     @Binding var showCustomerDetails: Bool
@@ -1252,7 +1394,6 @@ struct CustomerInfoView: View {
         }
     }
 }
-
 struct TicketDetailSection: View {
     let ticket: TicketDetail
 
@@ -1272,9 +1413,7 @@ struct TicketDetailSection: View {
         }
     }
 }
-
 // MARK: - Helper Views and Functions
-
 func statusColor(_ status: String) -> Color {
     switch status.lowercased() {
     case "todo", "to do": return .orange
@@ -1285,7 +1424,6 @@ func statusColor(_ status: String) -> Color {
     default: return .gray
     }
 }
-
 struct DetailRow: View {
     let label: String
     let value: String
@@ -1300,7 +1438,6 @@ struct DetailRow: View {
         }
     }
 }
-
 struct UploadsGrid: View {
     var serverMedia: [Multimedia]
     var localMedia: [LocalUpload]
@@ -1382,7 +1519,6 @@ struct UploadsGrid: View {
         .padding(.vertical)
     }
 }
-
 struct SectionHeader: View {
     var title: String
     var showPlus: Bool = false
@@ -1398,7 +1534,6 @@ struct SectionHeader: View {
         .foregroundColor(.white)
     }
 }
-
 struct HistoryRow: View {
     var status: String
     var employee: String
@@ -1419,26 +1554,6 @@ struct HistoryRow: View {
         }
     }
 }
-
-struct ChatBubble: View {
-    var text: String
-    var time: String
-    var isSender: Bool
-    var body: some View {
-        HStack(alignment: .bottom) {
-            if isSender { Spacer() }
-            VStack(alignment: isSender ? .trailing : .leading, spacing: 4) {
-                Text(text)
-                    .padding()
-                    .background(isSender ? Color.green.opacity(0.2) : Color.gray.opacity(0.2))
-                    .cornerRadius(12)
-                Text(time).font(.caption2).foregroundColor(.gray)
-            }
-            if !isSender { Spacer() }
-        }
-    }
-}
-
 func openInMaps(address: String) {
     // Encode the address for URL
     let query = address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
@@ -1452,7 +1567,6 @@ func openInMaps(address: String) {
         UIApplication.shared.open(appleURL)
     }
 }
-
 class LocationManager: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private var completion: ((CLLocationCoordinate2D?) -> Void)?
@@ -1519,7 +1633,6 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
         }
     }
 }
-
 struct RemoteImageView: View {
     let url: String
     private let baseURL = "https://d3shribgms6bz4.cloudfront.net/"
