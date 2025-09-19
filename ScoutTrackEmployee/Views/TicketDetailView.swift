@@ -971,8 +971,39 @@ struct TicketDetailView: View {
                             // Employee Uploads
                             SectionHeader(title: "Employee Uploads")
                             VStack(alignment: .leading, spacing: 12) {
-                                SectionHeader(title: "Issue Evidence", showPlus: true)
-                                    .onTapGesture { uploadType = "pre"; showUploadDialog = true }
+                                //  SectionHeader(title: "Issue Evidence", showPlus: true)
+                                //     .onTapGesture { uploadType = "pre"; showUploadDialog = true }
+                                HStack {
+                                    Text("Issue Evidence")
+                                        .font(.headline)
+                                    Spacer()
+                                    Button(action: {
+                                        uploadType = "pre"
+                                        showUploadDialog = true
+                                    }) {
+                                        Image(systemName: "plus.circle")
+                                            .font(.title3)
+                                            .frame(width: 44, height: 44)
+                                    }
+                                    // ✅ Attach confirmation dialog HERE
+                                    .confirmationDialog("Choose Upload Option", isPresented: $showUploadDialog) {
+                                        Button("Camera") {
+                                            isCamera = true
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                showImagePicker = true
+                                            }
+                                        }
+                                        Button("Gallery") {
+                                            isCamera = false
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                showImagePicker = true
+                                            }
+                                        }
+                                        Button("Cancel", role: .cancel) {}
+                                    }
+                                }
+                                .padding(.bottom, 4)
+
                                 UploadsGrid(
                                     serverMedia: ticket.employee_pre_uploads,
                                     localMedia: viewModel.getLocalUploads().filter { $0.mediaStage == "pre" }
@@ -1384,7 +1415,7 @@ struct CustomerInfoView: View {
             TicketActionButtons(
                 ticket: ticket,
                 viewModelticket: viewModelticket,
-                ticketDetailVM: ticketDetailVM, 
+                ticketDetailVM: ticketDetailVM,
                 onStartWork: {
                     viewModelticket.startWork(ticket: Ticket(from: ticket)) { updatedTicket in
                         ticketDetailVM.ticket = updatedTicket // ✅ works now

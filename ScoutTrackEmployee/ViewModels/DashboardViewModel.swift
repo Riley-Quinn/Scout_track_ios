@@ -2,6 +2,7 @@
 import Combine
 import CoreData
 import Foundation
+import SwiftUICore
 
 class DashboardViewModel: ObservableObject {
     @Published var tickets: [Ticket] = []
@@ -23,6 +24,7 @@ class DashboardViewModel: ObservableObject {
     @Published var editReason: String = ""
     @Published var weeklyToDoCounts: [String: Int] = [:] // ← Add this
     private var cancellables = Set<AnyCancellable>()
+    @Published var statusCounts: [String: Int] = [:] // dynamic counts for all statuses
     private var userId: String {
         UserDefaults.standard.string(forKey: "userId") ?? "0"
     }
@@ -34,7 +36,6 @@ class DashboardViewModel: ObservableObject {
     private let context = PersistenceController.shared.container.viewContext
     // Possible statuses for edit
     let editStatuses = ["Done", "On Hold", "Pending"]
-
     // Predefined service reasons
     let serviceReasons = [
         "Power Supply Issues",
@@ -283,10 +284,18 @@ class DashboardViewModel: ObservableObject {
             .replaceError(with: TicketCountsResponse(list: [:], total_count: 0))
             .receive(on: DispatchQueue.main)
             .sink { [weak self] response in
-                self?.pendingCount = response.list["Pending"]?.total_count ?? 0
-                self?.todoCount = response.list["ToDo"]?.total_count ?? 0
-                self?.inProgressCount = response.list["In-Progress"]?.total_count ?? 0
-                self?.onHoldCount = response.list["On-Hold"]?.total_count ?? 0
+                // Save all statuses dynamically
+                var counts: [String: Int] = [:]
+                for (status, value) in response.list {
+                    counts[status] = value.total_count
+                }
+                self?.statusCounts = counts
+
+                // Optional: update specific card counts if needed
+                self?.todoCount = counts["ToDo"] ?? 0
+                self?.inProgressCount = counts["In-Progress"] ?? 0
+                self?.pendingCount = counts["Pending"] ?? 0
+                self?.onHoldCount = counts["On-Hold"] ?? 0
             }
             .store(in: &cancellables)
     }
@@ -386,8 +395,6 @@ class DashboardViewModel: ObservableObject {
 
     // MARK: - Edit Status
 
-    // MARK: - Edit Status
-
     func updateTicketStatus(completion: ((TicketDetail?) -> Void)? = nil) {
         guard let ticket = selectedTicket else { return }
 
@@ -478,14 +485,12 @@ class DashboardViewModel: ObservableObject {
         {
             history = parsed
         }
-
         // ✅ Custom date + time format with comma
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
         df.timeZone = .current
         df.dateFormat = "MMM dd, yyyy, hh:mm a" // Example: "Sep 16, 2025, 09:03 AM"
         let formattedDate = df.string(from: Date())
-
         let newEntry: [String: Any] = [
             "message": message,
             "status": statusName,
@@ -493,7 +498,6 @@ class DashboardViewModel: ObservableObject {
             "changedBy": name,
             "timestamp": formattedDate, // ✅ Nice readable timestamp
         ]
-
         history.append(newEntry)
         let jsonData = try? JSONSerialization.data(withJSONObject: history)
         return String(data: jsonData ?? Data(), encoding: .utf8) ?? "[]"
@@ -506,4 +510,36 @@ extension DateFormatter {
         df.dateFormat = "yyyy-MM-dd"
         return df
     }()
+}
+
+extension DashboardViewModel {
+    var pieChartData: [StatusPieData] {
+        let total = max(statusCounts.values.reduce(0, +), 1) // total of all statuses
+        var data: [StatusPieData] = []
+
+        for (status, count) in statusCounts {
+            guard count > 0 else { continue }
+            data.append(
+                StatusPieData(
+                    status: status,
+                    count: count,
+                    percentage: Double(count) / Double(total),
+                    color: colorForStatus(status)
+                )
+            )
+        }
+        return data
+    }
+
+    // Helper: assign color for each status
+    private func colorForStatus(_ status: String) -> Color {
+        switch status.lowercased() {
+        case "todo", "to do": return .orange
+        case "in-progress", "in progress": return .blue
+        case "pending", "open": return .purple
+        case "on-hold", "on hold": return .pink
+        case "done": return .green
+        default: return .gray // any unknown status
+        }
+    }
 }

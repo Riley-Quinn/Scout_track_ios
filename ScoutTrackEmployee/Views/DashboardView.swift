@@ -1,74 +1,9 @@
 import Charts
 import SwiftUI
 
-struct WeeklyProgressView: View {
-    var weeklyCounts: [String: Int]
-    var closedCounts: [String: Int]
-
-    struct TicketData: Identifiable {
-        let id = UUID()
-        let day: String
-        let type: String
-        let value: Int
-    }
-
-    var weeklyData: [TicketData] {
-        let days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        var countsByWeekday: [String: Int] = [:]
-        let df = DateFormatter()
-        df.dateFormat = "yyyy-MM-dd"
-
-        for (dateStr, count) in weeklyCounts {
-            if let date = df.date(from: dateStr) {
-                let weekdayIndex = Calendar.current.component(.weekday, from: date)
-                let dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][weekdayIndex - 1]
-                countsByWeekday[dayName, default: 0] += count
-            }
-        }
-
-        return days.flatMap { day in
-            [
-                TicketData(day: day, type: "ToDo", value: countsByWeekday[day] ?? 0),
-                TicketData(day: day, type: "Closed", value: closedCounts[day] ?? 0),
-            ]
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Weekly Progress")
-                .font(.headline)
-                .padding(.leading, 8)
-
-            Chart(weeklyData) { data in
-                BarMark(
-                    x: .value("Day", data.day),
-                    y: .value("Count", data.value)
-                )
-                .foregroundStyle(data.type == "ToDo" ? Color.green : Color.blue)
-                .position(by: .value("Type", data.type))
-            }
-            .frame(height: 180)
-            .chartYAxis {
-                AxisMarks(position: .leading)
-            }
-            .padding(.horizontal, 8)
-        }
-        .padding()
-        .background(Color.white)
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-    }
-}
-
 struct DashboardView: View {
     @State private var navigateToAllTickets = false
     @StateObject private var viewModel = DashboardViewModel()
-
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -91,6 +26,44 @@ struct DashboardView: View {
                         HStack(spacing: 12) {
                             StatusCard(title: "Pending", count: viewModel.pendingCount, color: .purple, icon: "clock")
                             StatusCard(title: "On Hold", count: viewModel.onHoldCount, color: .pink, icon: "clock")
+                        }
+
+                        if !viewModel.pieChartData.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Ticket Status Distribution")
+                                    .font(.headline)
+                                    .padding(.horizontal)
+
+                                HStack(alignment: .top, spacing: 16) {
+                                    // 📊 Custom Pie Chart (iOS 16 compatible)
+                                    PieChartView(data: viewModel.pieChartData)
+                                        .frame(width: 180, height: 200)
+
+                                    // 📋 Scrollable Status Legend
+                                    ScrollView(.vertical, showsIndicators: true) {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            ForEach(viewModel.pieChartData) { data in
+                                                HStack(spacing: 8) {
+                                                    Circle()
+                                                        .fill(data.color)
+                                                        .frame(width: 12, height: 12)
+                                                    Text("\(data.status) - \(Int(data.percentage * 100))%")
+                                                        .font(.subheadline)
+                                                        .foregroundColor(.primary)
+                                                    Spacer()
+                                                    Text("(\(data.count))")
+                                                        .font(.subheadline)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                    .frame(height: 200) // 🧭 Match pie chart height
+                                }
+                                .padding(.horizontal)
+                                .padding(.bottom, 8)
+                            }
                         }
 
                         HStack {
@@ -178,7 +151,6 @@ struct DashboardView: View {
 struct BlinkingText: View {
     let text: String
     @State private var isVisible = true
-
     var body: some View {
         Text(text)
             .font(.subheadline)
@@ -193,6 +165,14 @@ struct BlinkingText: View {
                 }
             }
     }
+}
+
+struct StatusPieData: Identifiable {
+    let id = UUID()
+    let status: String
+    let count: Int
+    var percentage: Double
+    let color: Color
 }
 
 // 🔹 Service Update Sheet
@@ -243,7 +223,6 @@ struct ServiceUpdateSheet: View {
 // 🔹 Edit Status Sheet
 struct EditTicketSheet: View {
     @ObservedObject var viewModel: DashboardViewModel
-
     var body: some View {
         VStack(spacing: 20) {
             Text("Update Ticket Status")
@@ -256,14 +235,12 @@ struct EditTicketSheet: View {
             }
             .pickerStyle(SegmentedPickerStyle())
             .padding()
-
             // Show reason only for On Hold or Pending
             if viewModel.editStatus == "On Hold" || viewModel.editStatus == "Pending" {
                 TextField("Enter reason", text: $viewModel.editReason)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .padding(.horizontal)
             }
-
             HStack {
                 Button("Cancel") { viewModel.showEditSheet = false }
                     .buttonStyle(ActionButtonStyle(color: .gray))
@@ -284,7 +261,6 @@ struct StatusCard: View {
     var count: Int
     var color: Color
     var icon: String
-
     var body: some View {
         VStack {
             HStack {
@@ -320,7 +296,6 @@ struct TicketCard: View {
     var onStartWork: (() -> Void)?
     var onServiceUpdate: (() -> Void)?
     var onEdit: (() -> Void)?
-
     var body: some View {
         VStack(alignment: .leading, spacing: 4) { // Set spacing to 0 for tight layout
             // 🔹 Header
@@ -328,7 +303,6 @@ struct TicketCard: View {
                 Text(ticket.ticket_service_id ?? "Ticket #\(ticket.ticket_id)")
                     .font(.caption)
                     .foregroundColor(.white)
-
                 Spacer()
                 if isToday(ticket.employee_arrival_date) && ticket.status_name.lowercased() == "todo" {
                     VStack(alignment: .trailing, spacing: 2) {
@@ -347,7 +321,6 @@ struct TicketCard: View {
                             .font(.system(size: 12))
                     }
                 }
-
                 Text(ticket.status_name)
                     .font(.caption)
                     .padding(.horizontal, 8) // Reduced horizontal padding
@@ -360,20 +333,17 @@ struct TicketCard: View {
             .padding(.vertical, 4) // Reduced vertical padding
             .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
             .cornerRadius(12, corners: [.topLeft, .topRight])
-
             // 🔹 Body
             VStack(alignment: .leading, spacing: 6) { // reduced spacing between text elements
                 Text(ticket.title)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.black)
-
                 Text(ticket.description)
                     .font(.system(size: 12))
                     .foregroundColor(.black)
                     .multilineTextAlignment(.leading)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-
                 HStack {
                     HStack {
                         Text("Category:")
@@ -396,17 +366,13 @@ struct TicketCard: View {
                     }
                 }
                 .font(.subheadline)
-
                 Divider().padding(.vertical, 2) // Less padding for tighter layout
-
                 HStack {
                     // Customer Info on the left
                     Label("Customer: \(ticket.customer_name)", systemImage: "person")
                         .font(.caption)
                         .foregroundColor(.gray)
-
                     Spacer() // Pushes buttons to the right
-
                     // Status-based Actions on the right
                     if ticket.status_id == 1 {
                         Button("Assign to Me") { onAssign?() }
@@ -441,10 +407,8 @@ struct TicketCard: View {
         guard let dateString = dateString else {
             return false
         }
-
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
         if let date = isoFormatter.date(from: dateString) {
             let result = Calendar.current.isDateInToday(date)
             return result
@@ -455,15 +419,12 @@ struct TicketCard: View {
 
     private func formatTime(_ timeString: String?) -> String {
         guard let timeString = timeString else { return "" }
-
         let inputFormatter = DateFormatter()
         inputFormatter.dateFormat = "HH:mm:ss"
         inputFormatter.locale = Locale(identifier: "en_US_POSIX")
-
         let outputFormatter = DateFormatter()
         outputFormatter.dateFormat = "h:mm a"
         outputFormatter.locale = Locale(identifier: "en_US_POSIX")
-
         if let date = inputFormatter.date(from: timeString) {
             return outputFormatter.string(from: date)
         }
@@ -472,14 +433,11 @@ struct TicketCard: View {
 
     private func formatDate(_ dateString: String?) -> String {
         guard let dateString = dateString else { return "" }
-
         let inputFormatter = ISO8601DateFormatter()
         inputFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
         let outputFormatter = DateFormatter()
         outputFormatter.dateFormat = "MMM d, yyyy" // 👉 Example: Sep 20, 2025
         outputFormatter.locale = Locale(identifier: "en_US_POSIX")
-
         if let date = inputFormatter.date(from: dateString) {
             return outputFormatter.string(from: date)
         }
@@ -507,7 +465,6 @@ struct TicketCard: View {
 // 🔹 Reusable Button Style
 struct ActionButtonStyle: ButtonStyle {
     var color: Color
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.caption)
@@ -547,7 +504,6 @@ struct FooterTab: View {
     var icon: String
     var label: String
     var selected: Bool = false
-
     var body: some View {
         VStack {
             Image(systemName: icon)
@@ -557,5 +513,62 @@ struct FooterTab: View {
         .foregroundColor(
             selected ? Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255) : .gray
         )
+    }
+}
+
+struct PieSliceData {
+    var startAngle: Angle
+    var endAngle: Angle
+    var color: Color
+    var percentage: Double
+}
+
+struct PieChartView: View {
+    var data: [StatusPieData]
+
+    private func calculateSlices() -> [PieSliceData] {
+        var slices: [PieSliceData] = []
+        var startAngle = Angle(degrees: 0)
+        for item in data {
+            let endAngle = startAngle + Angle(degrees: item.percentage * 360)
+            slices.append(PieSliceData(startAngle: startAngle, endAngle: endAngle, color: item.color, percentage: item.percentage))
+            startAngle = endAngle
+        }
+        return slices
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                ForEach(Array(calculateSlices().enumerated()), id: \.offset) { _, slice in
+                    PieSliceView(slice: slice)
+                }
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: geometry.size.width * 0.5, height: geometry.size.height * 0.5)
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+    }
+}
+
+struct PieSliceView: View {
+    var slice: PieSliceData
+
+    var body: some View {
+        GeometryReader { geometry in
+            Path { path in
+                let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                path.move(to: center)
+                path.addArc(
+                    center: center,
+                    radius: min(geometry.size.width, geometry.size.height) / 2,
+                    startAngle: slice.startAngle,
+                    endAngle: slice.endAngle,
+                    clockwise: false
+                )
+            }
+            .fill(slice.color)
+        }
     }
 }
