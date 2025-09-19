@@ -1120,7 +1120,7 @@ struct TicketDetailView: View {
             ServiceUpdateSheetTicket(viewModel: viewModelticket)
         }
         .sheet(isPresented: $viewModelticket.showEditSheet) {
-            EditTicketSheetTicket(viewModel: viewModelticket)
+            EditTicketSheetTicket(viewModel: viewModelticket, ticketDetailVM: viewModel)
         }
     }
 }
@@ -1185,6 +1185,7 @@ struct ServiceUpdateSheetTicket: View {
 struct EditTicketSheetTicket: View {
     @ObservedObject var viewModel: DashboardViewModel
     // @State private var showUploadAlert = false // 🔔 State for alert
+    @ObservedObject var ticketDetailVM: TicketDetailViewModel
 
     var body: some View {
         VStack(spacing: 20) {
@@ -1209,10 +1210,19 @@ struct EditTicketSheetTicket: View {
             HStack {
                 Button("Cancel") { viewModel.showEditSheet = false }
                     .buttonStyle(ActionButtonStyle(color: .gray))
-                Button("Save") { viewModel.updateTicketStatus() }
-                    .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
-                    ))
-                    .disabled(viewModel.editStatus.isEmpty || ((viewModel.editStatus == "On Hold" || viewModel.editStatus == "Pending") && viewModel.editReason.isEmpty))
+                Button("Save") {
+                    viewModel.updateTicketStatus { updatedTicket in
+                        if let updated = updatedTicket {
+                            ticketDetailVM.ticket = updated
+                        }
+                        viewModel.showEditSheet = false
+                    }
+                }
+                .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)))
+                .disabled(
+                    viewModel.editStatus.isEmpty ||
+                        ((viewModel.editStatus == "On Hold" || viewModel.editStatus == "Pending") && viewModel.editReason.isEmpty)
+                )
             }
         }
         .padding()
@@ -1222,6 +1232,7 @@ struct EditTicketSheetTicket: View {
 struct TicketActionButtons: View {
     let ticket: TicketDetail
     @ObservedObject var viewModelticket: DashboardViewModel
+    @ObservedObject var ticketDetailVM: TicketDetailViewModel
     var onStartWork: (() -> Void)?
     var onServiceUpdate: (() -> Void)?
     var onEdit: (() -> Void)?
@@ -1373,6 +1384,7 @@ struct CustomerInfoView: View {
             TicketActionButtons(
                 ticket: ticket,
                 viewModelticket: viewModelticket,
+                ticketDetailVM: ticketDetailVM, 
                 onStartWork: {
                     viewModelticket.startWork(ticket: Ticket(from: ticket)) { updatedTicket in
                         ticketDetailVM.ticket = updatedTicket // ✅ works now
