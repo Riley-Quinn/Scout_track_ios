@@ -1494,7 +1494,7 @@ struct UploadsGrid: View {
                                     addresses[media.multimedia_id] = address
                                 }
                             }
-                    } 
+                    }
                 }
             }
 

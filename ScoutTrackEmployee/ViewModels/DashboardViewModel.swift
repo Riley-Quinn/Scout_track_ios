@@ -230,9 +230,9 @@ class DashboardViewModel: ObservableObject {
                             if let date = isoFormatter.date(from: dateStr) ?? dateFormatter.date(from: dateStr) {
                                 let dayKey = DateFormatter.shortDate.string(from: date)
                                 dayWiseToDo[dayKey, default: 0] += 1
-                            } 
-                        } 
-                    } 
+                            }
+                        }
+                    }
                 }
                 let todayKey = DateFormatter.shortDate.string(from: Date())
                 self?.tickets = tickets
@@ -327,7 +327,7 @@ class DashboardViewModel: ObservableObject {
             DispatchQueue.main.async {
                 if let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) {
                     self?.fetchTickets()
-                } 
+                }
             }
         }.resume()
     }
@@ -374,7 +374,7 @@ class DashboardViewModel: ObservableObject {
                     self?.showServiceUpdateSheet = false
                     self?.serviceReason = ""
                     self?.customServiceReason = ""
-                } 
+                }
             }
         }.resume()
     }

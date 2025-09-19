@@ -331,13 +331,21 @@ struct TicketCard: View {
 
                 Spacer()
                 if isToday(ticket.employee_arrival_date) && ticket.status_name.lowercased() == "todo" {
-                    BlinkingText(text: formatTime(ticket.employee_arrival_time))
-                        .foregroundColor(.white)
-                        .font(.system(size: 12))
+                    VStack(alignment: .trailing, spacing: 2) {
+                        BlinkingText(text: formatDate(ticket.employee_arrival_date))
+                        BlinkingText(text: formatTime(ticket.employee_arrival_time))
+                            .foregroundColor(.white)
+                            .font(.system(size: 12))
+                    }
                 } else {
-                    Text(formatTime(ticket.employee_arrival_time))
-                        .foregroundColor(.white)
-                        .font(.system(size: 12))
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(formatDate(ticket.employee_arrival_date))
+                            .foregroundColor(.white)
+                            .font(.system(size: 12))
+                        Text(formatTime(ticket.employee_arrival_time))
+                            .foregroundColor(.white)
+                            .font(.system(size: 12))
+                    }
                 }
 
                 Text(ticket.status_name)
@@ -460,6 +468,22 @@ struct TicketCard: View {
             return outputFormatter.string(from: date)
         }
         return timeString
+    }
+
+    private func formatDate(_ dateString: String?) -> String {
+        guard let dateString = dateString else { return "" }
+
+        let inputFormatter = ISO8601DateFormatter()
+        inputFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let outputFormatter = DateFormatter()
+        outputFormatter.dateFormat = "MMM d, yyyy" // 👉 Example: Sep 20, 2025
+        outputFormatter.locale = Locale(identifier: "en_US_POSIX")
+
+        if let date = inputFormatter.date(from: dateString) {
+            return outputFormatter.string(from: date)
+        }
+        return dateString
     }
 
     func statusColor(_ status: String) -> Color {
