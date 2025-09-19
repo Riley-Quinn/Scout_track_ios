@@ -373,9 +373,6 @@ struct CalendarView: View {
                         }
                         return false
                     }
-
-                    print("✅ Fetched \(self.tickets.count) tickets with arrival dates")
-
                     for ticket in self.tickets {
                         print("Ticket \(ticket.ticket_id): Date = \(ticket.employee_arrival_date ?? "nil"), Time = \(ticket.employee_arrival_time ?? "nil"), Parsed = \(ticket.date)")
                     }
