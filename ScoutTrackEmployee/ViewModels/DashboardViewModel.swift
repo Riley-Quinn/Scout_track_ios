@@ -293,40 +293,45 @@ class DashboardViewModel: ObservableObject {
 
     // MARK: - Start Work
 
-    func startWork(ticket: Ticket) {
-        let message = "Work started"
+    func startWork(ticket: Ticket, completion: ((TicketDetail?) -> Void)? = nil) {
         let tracker = createStatusTracker(
             previousData: ticket.status_tracker,
-            message: message,
+            message: "Work started",
             statusName: "In-Progress",
             statusId: 3
         )
 
-        guard let url = URL(string: "\(Config.baseURL)/api/tickets/\(ticket.ticket_id)") else {
-            return
-        }
+        guard let url = URL(string: "\(Config.baseURL)/api/tickets/\(ticket.ticket_id)") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let body: [String: Any] = [
             "ticketData": [
-                "status_id": 3, // In-Progress
+                "status_id": 3,
                 "status_tracker": tracker,
             ],
         ]
 
         do {
-            let bodyData = try JSONSerialization.data(withJSONObject: body, options: [])
-            request.httpBody = bodyData
-        } catch {
-            return
-        }
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        } catch { return }
 
-        URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
+        URLSession.shared.dataTask(with: request) { _, response, _ in
             DispatchQueue.main.async {
                 if let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) {
-                    self?.fetchTickets()
+                    // Update local ticket immediately
+                    var updatedTicket = ticket.toTicketDetail()
+                    updatedTicket.status_id = 3
+                    updatedTicket.status_name = "In-Progress"
+                    updatedTicket.status_tracker = tracker
+
+                    // Call completion only if it was provided
+                    completion?(updatedTicket)
+
+                    self.fetchTickets() // Optional: refresh dashboard
+                } else {
+                    completion?(nil) // ❌ in case of failure
                 }
             }
         }.resume()
@@ -381,7 +386,9 @@ class DashboardViewModel: ObservableObject {
 
     // MARK: - Edit Status
 
-    func updateTicketStatus() {
+    // MARK: - Edit Status
+
+    func updateTicketStatus(completion: ((TicketDetail?) -> Void)? = nil) {
         guard let ticket = selectedTicket else { return }
 
         // Map status text to IDs
@@ -394,7 +401,7 @@ class DashboardViewModel: ObservableObject {
         }
 
         // Reason is required for On Hold / Pending
-        var message: String
+        let message: String
         if editStatus == "Done" {
             message = "Service Completed"
         } else {
@@ -427,10 +434,25 @@ class DashboardViewModel: ObservableObject {
         URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
             DispatchQueue.main.async {
                 if let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) {
+                    // ✅ Update local copy
+                    var updatedTicket = ticket.toTicketDetail()
+                    updatedTicket.status_id = statusId
+                    updatedTicket.status_name = self?.editStatus ?? updatedTicket.status_name
+                    updatedTicket.status_tracker = tracker
+
+                    // ✅ Save to Core Data
+                    CoreDataManager.shared.save(ticket: updatedTicket)
+
+                    // ✅ Call completion handler
+                    completion?(updatedTicket)
+
+                    // ✅ Reset UI
                     self?.fetchTickets()
                     self?.showEditSheet = false
                     self?.editStatus = ""
                     self?.editReason = ""
+                } else {
+                    completion?(nil)
                 }
             }
         }.resume()

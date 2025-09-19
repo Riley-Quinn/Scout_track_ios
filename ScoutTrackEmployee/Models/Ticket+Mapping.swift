@@ -18,3 +18,33 @@ extension Ticket {
         employee_arrival_time = nil
     }
 }
+
+extension Ticket {
+    func toTicketDetail() -> TicketDetail {
+        return TicketDetail(
+            ticket_id: ticket_id,
+            ticket_service_id: ticket_service_id ?? "",
+            description: description,
+            status_name: status_name,
+            priority_rank: priority_rank,
+            category_name: category_name,
+            created_at: created_at,
+            customer_name: "",
+            customer_email: "", // default if optional
+            customer_phone: "",
+            region_name: region_name,
+            address: "",
+            state_name: "",
+            city_name: city_name ?? "",
+            address_type: "",
+            title: title,
+            multimedia: nil,
+            status_tracker: status_tracker,
+            customer_comments: "",
+            customer_type: "", // default value
+            customer_division: "", // default value
+            employee_arrival_date: employee_arrival_date,
+            status_id: status_id
+        )
+    }
+}

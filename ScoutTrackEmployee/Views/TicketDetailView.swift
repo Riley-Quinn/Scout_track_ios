@@ -33,7 +33,7 @@ struct LocalTicket: Codable, Identifiable {
     let customer_division: String?
     let title: String
     let employee_arrival_date: String?
-    let status_id: Int
+    var status_id: Int
 }
 
 final class PhotoAlbumManager {
@@ -316,7 +316,7 @@ struct TicketDetail: Codable {
     let ticket_id: Int
     let ticket_service_id: String
     let description: String
-    let status_name: String
+    var status_name: String
     let priority_rank: String?
     let category_name: String
     let created_at: String
@@ -330,7 +330,7 @@ struct TicketDetail: Codable {
     let address_type: String?
     let title: String
     let multimedia: [Multimedia]?
-    let status_tracker: String?
+    var status_tracker: String?
     var customer_comments: String?
     let customer_type: String?
     let customer_division: String?
@@ -347,7 +347,7 @@ struct TicketDetail: Codable {
         multimedia?.filter { ($0.media_stage ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? []
     }
 
-    let status_id: Int
+    var status_id: Int
 }
 
 struct StatusTracker: Decodable {
@@ -949,7 +949,8 @@ struct TicketDetailView: View {
                             CustomerInfoView(ticket: ticket,
                                              showCustomerDetails: $showCustomerDetails,
                                              openInMaps: openInMaps,
-                                             viewModelticket: viewModelticket)
+                                             viewModelticket: viewModelticket,
+                                             ticketDetailVM: viewModel)
 
                             // Customer Uploads
                             if !ticket.customer_uploads.isEmpty || !viewModel.getLocalUploads().filter({ $0.mediaStage == nil }).isEmpty {
@@ -1221,7 +1222,6 @@ struct EditTicketSheetTicket: View {
 struct TicketActionButtons: View {
     let ticket: TicketDetail
     @ObservedObject var viewModelticket: DashboardViewModel
-    var onSetArrival: (() -> Void)?
     var onStartWork: (() -> Void)?
     var onServiceUpdate: (() -> Void)?
     var onEdit: (() -> Void)?
@@ -1283,6 +1283,7 @@ struct CustomerInfoView: View {
     @Binding var showCustomerDetails: Bool
     var openInMaps: (String) -> Void
     @ObservedObject var viewModelticket: DashboardViewModel
+    @ObservedObject var ticketDetailVM: TicketDetailViewModel
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Customer / Company
@@ -1372,14 +1373,12 @@ struct CustomerInfoView: View {
             TicketActionButtons(
                 ticket: ticket,
                 viewModelticket: viewModelticket,
-                onSetArrival: {
-                    viewModelticket.selectedTicket = Ticket(from: ticket)
-                    viewModelticket.arrivalDate = Date()
-                    viewModelticket.showArrivalSheet = true
-                },
                 onStartWork: {
-                    viewModelticket.startWork(ticket: Ticket(from: ticket))
+                    viewModelticket.startWork(ticket: Ticket(from: ticket)) { updatedTicket in
+                        ticketDetailVM.ticket = updatedTicket // ✅ works now
+                    }
                 },
+
                 onServiceUpdate: {
                     viewModelticket.selectedTicket = Ticket(from: ticket)
                     viewModelticket.showServiceUpdateSheet = true
