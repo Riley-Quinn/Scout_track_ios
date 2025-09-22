@@ -974,18 +974,21 @@ struct TicketDetailView: View {
                                 //  SectionHeader(title: "Issue Evidence", showPlus: true)
                                 //     .onTapGesture { uploadType = "pre"; showUploadDialog = true }
                                 HStack {
-                                    Text("Issue Evidence")
-                                        .font(.headline)
-                                    Spacer()
-                                    Button(action: {
-                                        uploadType = "pre"
-                                        showUploadDialog = true
-                                    }) {
-                                        Image(systemName: "plus.circle")
-                                            .font(.title3)
+                                    HStack {
+                                        Text("Issue Evidence").font(.headline)
+                                        Spacer()
+                                        Image(systemName: "plus.circle.fill")
+                                            .font(.system(size: 30))
+                                            // .font(.title3)
                                             .frame(width: 44, height: 44)
                                     }
-                                    // ✅ Attach confirmation dialog HERE
+                                    .padding()
+                                    .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255).opacity(0.9))
+                                    .foregroundColor(.white)
+                                    .onTapGesture {
+                                        uploadType = "pre"
+                                        showUploadDialog = true
+                                    }
                                     .confirmationDialog("Choose Upload Option", isPresented: $showUploadDialog) {
                                         Button("Camera") {
                                             isCamera = true
@@ -1008,16 +1011,50 @@ struct TicketDetailView: View {
                                     serverMedia: ticket.employee_pre_uploads,
                                     localMedia: viewModel.getLocalUploads().filter { $0.mediaStage == "pre" }
                                 )
-                                SectionHeader(title: "Resolution Evidence", showPlus: true)
-                                    .onTapGesture { uploadType = "post"; showUploadDialog = true }
+                                // SectionHeader(title: "Resolution Evidence", showPlus: true)
+                                //     .onTapGesture { uploadType = "post"; showUploadDialog = true }
+                                HStack {
+                                    HStack {
+                                        Text("Resolution Evidence").font(.headline)
+                                        Spacer()
+                                        Image(systemName: "plus.circle.fill")
+                                            .font(.system(size: 30))
+                                            .font(.title3)
+                                            .frame(width: 44, height: 44)
+                                    }
+                                    .padding()
+                                    .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255).opacity(0.9))
+                                    .foregroundColor(.white)
+                                    .onTapGesture {
+                                        uploadType = "post"
+                                        showUploadDialog = true
+                                    }
+                                    .confirmationDialog("Choose Upload Option", isPresented: $showUploadDialog) {
+                                        Button("Camera") {
+                                            isCamera = true
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                showImagePicker = true
+                                            }
+                                        }
+                                        Button("Gallery") {
+                                            isCamera = false
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                showImagePicker = true
+                                            }
+                                        }
+                                        Button("Cancel", role: .cancel) {}
+                                    }
+                                }
+                                .padding(.bottom, 4)
+
                                 UploadsGrid(
                                     serverMedia: ticket.employee_post_uploads,
                                     localMedia: viewModel.getLocalUploads().filter { $0.mediaStage == "post" }
                                 )
                             }.padding(.horizontal)
-                            Button("Retry Pending Uploads") {
-                                viewModel.retryPendingUploads()
-                            }
+                            // Button("Retry Pending Uploads") {
+                            //     viewModel.retryPendingUploads()
+                            // }
                             SectionHeader(title: "History")
                             ScrollView(.vertical, showsIndicators: true) {
                                 VStack(alignment: .leading, spacing: 12) {
@@ -1714,7 +1751,7 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
 
 struct RemoteImageView: View {
     let url: String
-    private let baseURL = "https://d3shribgms6bz4.cloudfront.net/"
+    private let baseURL = "https://d2plv0g319oam3.cloudfront.net/"
 
     var body: some View {
         AsyncImage(

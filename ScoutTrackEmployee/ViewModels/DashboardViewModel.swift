@@ -7,10 +7,6 @@ import SwiftUICore
 class DashboardViewModel: ObservableObject {
     @Published var tickets: [Ticket] = []
     @Published var isLoading: Bool = false
-    @Published var todoCount: Int = 0
-    @Published var inProgressCount: Int = 0
-    @Published var pendingCount: Int = 0
-    @Published var onHoldCount: Int = 0
     @Published var selectedTicketDetail: TicketDetail?
     @Published var showArrivalSheet: Bool = false
     @Published var selectedTicket: Ticket?
@@ -22,9 +18,27 @@ class DashboardViewModel: ObservableObject {
     @Published var showEditSheet = false
     @Published var editStatus: String = ""
     @Published var editReason: String = ""
-    @Published var weeklyToDoCounts: [String: Int] = [:] // ← Add this
+    @Published var weeklyToDoCounts: [String: Int] = [:]
     private var cancellables = Set<AnyCancellable>()
-    @Published var statusCounts: [String: Int] = [:] // dynamic counts for all statuses
+    @Published var statusCounts: [String: Int] = [:] // ✅ This will hold all status counts
+    
+    // ✅ ADD computed properties for individual status counts
+    var todoCount: Int {
+        return statusCounts["ToDo"] ?? statusCounts["To Do"] ?? statusCounts["todo"] ?? statusCounts["to do"] ?? 0
+    }
+    
+    var inProgressCount: Int {
+        return statusCounts["In-Progress"] ?? statusCounts["In Progress"] ?? statusCounts["in-progress"] ?? statusCounts["in progress"] ?? 0
+    }
+    
+    var pendingCount: Int {
+        return statusCounts["Pending"] ?? statusCounts["pending"] ?? 0
+    }
+    
+    var onHoldCount: Int {
+        return statusCounts["On-Hold"] ?? statusCounts["On Hold"] ?? statusCounts["on-hold"] ?? statusCounts["on hold"] ?? 0
+    }
+    
     private var userId: String {
         UserDefaults.standard.string(forKey: "userId") ?? "0"
     }
@@ -52,8 +66,9 @@ class DashboardViewModel: ObservableObject {
 
     // MARK: - Fetch Tickets (API + Core Data)
 
-    func fetchTickets(onlyToday: Bool = false) {
+    func fetchTickets(onlyToday: Bool = true) {
         guard let url = URL(string: "\(Config.baseURL)/api/tickets/employee/\(userId)") else {
+            print("❌ Invalid URL")
             return
         }
 
@@ -62,67 +77,45 @@ class DashboardViewModel: ObservableObject {
             .map { $0.data }
             .decode(type: TicketListResponse.self, decoder: JSONDecoder())
             .map { response -> [Ticket] in
-                let isoFormatter = ISO8601DateFormatter()
-                isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-                let isoFormatterNoMillis = ISO8601DateFormatter()
-                isoFormatterNoMillis.formatOptions = [.withInternetDateTime]
-
-                func parseDate(_ dateString: String?) -> Date? {
-                    guard let str = dateString else { return nil }
-                    return isoFormatter.date(from: str) ?? isoFormatterNoMillis.date(from: str)
-                }
-
-                let allTickets = response.list
-                let today = Calendar.current.startOfDay(for: Date())
                 let now = Date()
+                let today = Calendar.current.startOfDay(for: now)
 
-                // Step 1: Apply onlyToday filter
-                var filteredTickets = allTickets
-                if onlyToday {
-                    filteredTickets = allTickets.filter { ticket in
-                        if let arrivalDate = parseDate(ticket.employee_arrival_date) {
-                            return Calendar.current.isDate(arrivalDate, inSameDayAs: today)
+                // Step 1: Filter tickets
+                var filteredTickets = response.list.filter { ticket in
+                    // 1️⃣ OnlyToday filter
+                    if onlyToday {
+                        guard let arrivalDate = self.parseDateTime(dateStr: ticket.employee_arrival_date,
+                                                                   timeStr: ticket.employee_arrival_time),
+                            Calendar.current.isDate(arrivalDate, inSameDayAs: today)
+                        else {
+                            return false
                         }
+                    }
+
+                    // 2️⃣ Only ToDo status
+                    if ticket.status_id != 2 {
                         return false
                     }
-                }
 
-                // Step 2: Remove tickets if time passed AND status_id != 2
-                filteredTickets = filteredTickets.filter { ticket in
-                    if let arrivalDate = parseDate(ticket.employee_arrival_date) {
+                    // 3️⃣ Arrival time logic
+                    if let arrivalDate = self.parseDateTime(dateStr: ticket.employee_arrival_date,
+                                                            timeStr: ticket.employee_arrival_time)
+                    {
                         if arrivalDate < now && ticket.status_id != 2 {
-                            return false // remove it
+                            return false
                         }
+                    } else {
+                        return false
                     }
+
                     return true
                 }
 
-                // Step 3: Sort tickets
-                return filteredTickets.sorted { t1, t2 in
-                    let date1 = parseDate(t1.employee_arrival_date)
-                    let date2 = parseDate(t2.employee_arrival_date)
-
-                    // Case 1: Both have dates → sort by date
-                    if let d1 = date1, let d2 = date2 {
-                        return d1 < d2
-                    }
-
-                    // Case 2: One has date → date comes first
-                    if let _ = date1, date2 == nil { return true }
-                    if date1 == nil, let _ = date2 { return false }
-
-                    // Case 3: Both missing dates → Only status_id == 2 tickets sorted by urgency
-                    if t1.status_id == 2 && t2.status_id == 2 {
-                        return (t1.urgency ?? Int.max) < (t2.urgency ?? Int.max)
-                    }
-
-                    // Case 4: status_id == 2 comes before others with no date
-                    if t1.status_id == 2 && t2.status_id != 2 { return true }
-                    if t1.status_id != 2 && t2.status_id == 2 { return false }
-
-                    // Case 5: Otherwise → keep same order
-                    return false
+                // Step 2: Sort tickets by arrival time
+                return filteredTickets.sorted {
+                    let date1 = self.parseDateTime(dateStr: $0.employee_arrival_date, timeStr: $0.employee_arrival_time) ?? Date.distantFuture
+                    let date2 = self.parseDateTime(dateStr: $1.employee_arrival_date, timeStr: $1.employee_arrival_time) ?? Date.distantFuture
+                    return date1 < date2
                 }
             }
             .receive(on: DispatchQueue.main)
@@ -132,38 +125,11 @@ class DashboardViewModel: ObservableObject {
                     self?.isLoading = false
                 }
             }, receiveValue: { [weak self] (tickets: [Ticket]) in
-                var dayWiseToDo: [String: Int] = [:]
-
-                for ticket in tickets {
-                    guard let trackerStr = ticket.status_tracker,
-                          let data = trackerStr.data(using: .utf8),
-                          let trackerArrayAny = try? JSONSerialization.jsonObject(with: data),
-                          let trackerArray = trackerArrayAny as? [[String: Any]]
-                    else { continue }
-
-                    if let todoEntry = trackerArray.first(where: {
-                        ($0["status"] as? String)?.lowercased() == "todo" || ($0["status"] as? String)?.lowercased() == "to do"
-                    }) {
-                        if let dateStr = (todoEntry["timestamp"] as? String) ?? (todoEntry["Date"] as? String) {
-                            let isoFormatter = ISO8601DateFormatter()
-                            let dateFormatter = DateFormatter()
-                            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-                            dateFormatter.dateFormat = "MMM dd, yyyy, hh:mm a"
-
-                            if let date = isoFormatter.date(from: dateStr) ?? dateFormatter.date(from: dateStr) {
-                                let dayKey = DateFormatter.shortDate.string(from: date)
-                                dayWiseToDo[dayKey, default: 0] += 1
-                            }
-                        }
-                    }
-                }
-
-                let todayKey = DateFormatter.shortDate.string(from: Date())
+                // ✅ REMOVED: Don't calculate counts here - use API counts instead
                 self?.tickets = tickets
-                self?.todoCount = dayWiseToDo[todayKey] ?? 0
-                self?.weeklyToDoCounts = dayWiseToDo
                 self?.isLoading = false
                 self?.saveTicketsOffline(tickets)
+                print("📥 Final tickets assigned: \(tickets.count)")
             })
             .store(in: &cancellables)
     }
@@ -207,43 +173,43 @@ class DashboardViewModel: ObservableObject {
                     self?.isLoading = false
                 }
             }, receiveValue: { [weak self] (tickets: [Ticket]) in
-                var dayWiseToDo: [String: Int] = [:]
-
-                for ticket in tickets {
-                    guard let trackerStr = ticket.status_tracker,
-                          let data = trackerStr.data(using: .utf8),
-                          let trackerArrayAny = try? JSONSerialization.jsonObject(with: data),
-                          let trackerArray = trackerArrayAny as? [[String: Any]]
-                    else {
-                        continue
-                    }
-                    if let todoEntry = trackerArray.first(where: {
-                        guard let status = $0["status"] as? String else { return false }
-                        return status.lowercased() == "todo" || status.lowercased() == "to do"
-                    }) {
-                        // ✅ Try timestamp first, then fallback to "Date"
-                        if let dateStr = (todoEntry["timestamp"] as? String) ?? (todoEntry["Date"] as? String) {
-                            let isoFormatter = ISO8601DateFormatter()
-                            let dateFormatter = DateFormatter()
-                            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-                            dateFormatter.dateFormat = "MMM dd, yyyy, hh:mm a"
-
-                            if let date = isoFormatter.date(from: dateStr) ?? dateFormatter.date(from: dateStr) {
-                                let dayKey = DateFormatter.shortDate.string(from: date)
-                                dayWiseToDo[dayKey, default: 0] += 1
-                            }
-                        }
-                    }
-                }
-                let todayKey = DateFormatter.shortDate.string(from: Date())
+                // ✅ REMOVED: Don't calculate counts here either - use API counts
                 self?.tickets = tickets
-                self?.todoCount = dayWiseToDo[todayKey] ?? 0
-                self?.weeklyToDoCounts = dayWiseToDo
                 self?.isLoading = false
-
                 self?.saveTicketsOffline(tickets)
             })
             .store(in: &cancellables)
+    }
+
+    func parseDateTime(dateStr: String?, timeStr: String?) -> Date? {
+        guard let dateStr = dateStr else { return nil }
+
+        // Step 1: Handle ISO8601 for date part
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let isoFormatterNoMillis = ISO8601DateFormatter()
+        isoFormatterNoMillis.formatOptions = [.withInternetDateTime]
+
+        var datePart: Date? = isoFormatter.date(from: dateStr) ?? isoFormatterNoMillis.date(from: dateStr)
+
+        // Step 2: If time is provided, merge with date
+        if let timeStr = timeStr, let dateOnly = datePart {
+            let timeFormatter = DateFormatter()
+            timeFormatter.dateFormat = "HH:mm:ss"
+            timeFormatter.timeZone = TimeZone.current
+
+            if let time = timeFormatter.date(from: timeStr) {
+                let calendar = Calendar.current
+                let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: time)
+                datePart = calendar.date(bySettingHour: timeComponents.hour ?? 0,
+                                         minute: timeComponents.minute ?? 0,
+                                         second: timeComponents.second ?? 0,
+                                         of: dateOnly)
+            }
+        }
+
+        return datePart
     }
 
     // MARK: - Save Tickets in Core Data
@@ -278,24 +244,32 @@ class DashboardViewModel: ObservableObject {
     func fetchAllStatusCounts() {
         guard let url = URL(string: "\(Config.baseURL)/api/tickets/employee/ticket-counts/\(userId)") else { return }
 
-        URLSession.shared.dataTaskPublisher(for: url)
+        // Read clientId from UserDefaults
+        let clientId = UserDefaults.standard.string(forKey: "clientId") ?? ""
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue(clientId, forHTTPHeaderField: "x-client-id") // <-- Add client ID header
+
+        URLSession.shared.dataTaskPublisher(for: request)
+            .handleEvents(receiveOutput: { output in
+                if let jsonString = String(data: output.data, encoding: .utf8) {
+                    print("Raw Response: \(jsonString)")
+                }
+            })
             .map { $0.data }
             .decode(type: TicketCountsResponse.self, decoder: JSONDecoder())
             .replaceError(with: TicketCountsResponse(list: [:], total_count: 0))
             .receive(on: DispatchQueue.main)
             .sink { [weak self] response in
-                // Save all statuses dynamically
+                guard let self = self else { return }
+
+                // ✅ ONLY set statusCounts - computed properties will handle the rest
                 var counts: [String: Int] = [:]
                 for (status, value) in response.list {
                     counts[status] = value.total_count
                 }
-                self?.statusCounts = counts
-
-                // Optional: update specific card counts if needed
-                self?.todoCount = counts["ToDo"] ?? 0
-                self?.inProgressCount = counts["In-Progress"] ?? 0
-                self?.pendingCount = counts["Pending"] ?? 0
-                self?.onHoldCount = counts["On-Hold"] ?? 0
+                self.statusCounts = counts
             }
             .store(in: &cancellables)
     }
