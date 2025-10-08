@@ -990,12 +990,12 @@ struct TicketDetailView: View {
                                         showUploadDialog = true
                                     }
                                     .confirmationDialog("Choose Upload Option", isPresented: $showUploadDialog) {
-                                        Button("Camera") {
-                                            isCamera = true
-                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                                showImagePicker = true
-                                            }
-                                        }
+                                        // Button("Camera") {
+                                        //     isCamera = true
+                                        //     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        //         showImagePicker = true
+                                        //     }
+                                        // }
                                         Button("Gallery") {
                                             isCamera = false
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -1030,12 +1030,12 @@ struct TicketDetailView: View {
                                         showUploadDialog = true
                                     }
                                     .confirmationDialog("Choose Upload Option", isPresented: $showUploadDialog) {
-                                        Button("Camera") {
-                                            isCamera = true
-                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                                showImagePicker = true
-                                            }
-                                        }
+                                        // Button("Camera") {
+                                        //     isCamera = true
+                                        //     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        //         showImagePicker = true
+                                        //     }
+                                        // }
                                         Button("Gallery") {
                                             isCamera = false
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -1110,10 +1110,10 @@ struct TicketDetailView: View {
                 viewModel.retryPendingUploads()
             }
             .confirmationDialog("Choose Upload Option", isPresented: $showUploadDialog) {
-                Button("Camera") {
-                    isCamera = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { showImagePicker = true }
-                }
+                // Button("Camera") {
+                //     isCamera = true
+                //     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { showImagePicker = true }
+                // }
                 Button("Gallery") {
                     isCamera = false
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { showImagePicker = true }
@@ -1556,7 +1556,7 @@ struct UploadsGrid: View {
     var localMedia: [LocalUpload]
     @State private var addresses: [Int: String] = [:]
     @State private var selectedImageSource: ImageSource? = nil
-    
+
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 12) {
             // 🔹 Server media
@@ -1569,7 +1569,7 @@ struct UploadsGrid: View {
                             let fullURL = media.file_name.hasPrefix("http")
                                 ? media.file_name
                                 : "https://innovative-lifts.blr1.cdn.digitaloceanspaces.com/\(media.file_name.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
-                            
+
                             selectedImageSource = .remote(fullURL)
                         }
 
@@ -1578,15 +1578,26 @@ struct UploadsGrid: View {
                        !lat.isEmpty, !lon.isEmpty
                     {
                         // Only show address if coords exist
-                        Text(addresses[media.multimedia_id] ?? "Loading...")
-                            .font(.caption2)
-                            .foregroundColor(.gray)
-                            .multilineTextAlignment(.center)
-                            .onAppear {
-                                LocationHelper.shared.getAddress(latitude: lat, longitude: lon) { address in
-                                    addresses[media.multimedia_id] = address
+                        if let address = addresses[media.multimedia_id] {
+                            Text(address)
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                                .underline()
+                                .multilineTextAlignment(.center)
+                                .onTapGesture {
+                                    openInMaps(address: address)
                                 }
-                            }
+                        } else {
+                            Text("Loading...")
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                                .multilineTextAlignment(.center)
+                                .onAppear {
+                                    LocationHelper.shared.getAddress(latitude: lat, longitude: lon) { address in
+                                        addresses[media.multimedia_id] = address
+                                    }
+                                }
+                        }
                     }
                 }
             }
@@ -1660,7 +1671,7 @@ extension ImageSource: Identifiable {
         switch self {
         case .local:
             return "local-\(UUID().uuidString)"
-        case .remote(let url):
+        case let .remote(url):
             return "remote-\(url)"
         }
     }
@@ -1675,7 +1686,7 @@ struct FullScreenImageView: View {
             Color.black.ignoresSafeArea()
 
             switch imageSource {
-            case .local(let uiImage):
+            case let .local(uiImage):
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFit()
@@ -1683,8 +1694,8 @@ struct FullScreenImageView: View {
                     .onAppear {
                         print("🟢 Showing local image")
                     }
-                
-            case .remote(let urlString):
+
+            case let .remote(urlString):
                 RemoteFullScreenImage(urlString: urlString)
                     .onAppear {
                         print("🌐 RemoteFullScreenImage received URL:", urlString)
@@ -1704,18 +1715,19 @@ struct FullScreenImageView: View {
 
 struct RemoteFullScreenImage: View {
     let urlString: String
-    
+
     private var url: URL? {
         // Try to create URL directly first
         if let directURL = URL(string: urlString) {
             return directURL
         }
-        
+
         // If that fails, try percent encoding
         if let encodedString = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-           let encodedURL = URL(string: encodedString) {
+           let encodedURL = URL(string: encodedString)
+        {
             return encodedURL
-        }        
+        }
         return nil
     }
 
@@ -1779,6 +1791,7 @@ struct RemoteFullScreenImage: View {
         }
     }
 }
+
 struct SectionHeader: View {
     var title: String
     var showPlus: Bool = false

@@ -35,7 +35,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		143933632E954D970030DFF2 /* Untitled.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Untitled.swift; sourceTree = "<group>"; };
 		143933642E954E890030DFF2 /* Asset.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Asset.xcassets; sourceTree = "<group>"; };
 		1455319E2E66F3C900EB945A /* Model.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Model.xcdatamodel; sourceTree = "<group>"; };
 		14B040562E44C0B600CF4658 /* ScoutTrackEmployee.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ScoutTrackEmployee.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -100,7 +99,6 @@
 			isa = PBXGroup;
 			children = (
 				143933642E954E890030DFF2 /* Asset.xcassets */,
-				143933632E954D970030DFF2 /* Untitled.swift */,
 				1455319D2E66F3C900EB945A /* Model.xcdatamodeld */,
 				14B040582E44C0B600CF4658 /* ScoutTrackEmployee */,
 				14B040572E44C0B600CF4658 /* Products */,
@@ -328,7 +326,10 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ScoutTrackEmployee/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app needs access to the local network for development purposes.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "\"We need your location to show nearby places.\"(PRODUCT_BUNDLE_IDENTIFIER)";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "We need access to save offline ticket images.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need access to show offline images.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -371,7 +372,10 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ScoutTrackEmployee/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app needs access to the local network for development purposes.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "\"We need your location to show nearby places.\"(PRODUCT_BUNDLE_IDENTIFIER)";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "We need access to save offline ticket images.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need access to show offline images.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
