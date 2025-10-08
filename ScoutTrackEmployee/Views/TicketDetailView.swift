@@ -978,9 +978,9 @@ struct TicketDetailView: View {
                                         Text("Issue Evidence").font(.headline)
                                         Spacer()
                                         Image(systemName: "plus.circle.fill")
-                                            .font(.system(size: 30))
+                                            .font(.system(size: 26))
                                             // .font(.title3)
-                                            .frame(width: 44, height: 44)
+                                            .frame(width: 22, height: 22)
                                     }
                                     .padding()
                                     .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255).opacity(0.9))
@@ -1018,9 +1018,9 @@ struct TicketDetailView: View {
                                         Text("Resolution Evidence").font(.headline)
                                         Spacer()
                                         Image(systemName: "plus.circle.fill")
-                                            .font(.system(size: 30))
+                                            .font(.system(size: 26))
                                             .font(.title3)
-                                            .frame(width: 44, height: 44)
+                                            .frame(width: 22, height: 22)
                                     }
                                     .padding()
                                     .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255).opacity(0.9))
@@ -1373,7 +1373,7 @@ struct CustomerInfoView: View {
                 Text("Customer")
                     .font(.subheadline)
                     .frame(width: 80, alignment: .leading) // fixed width for labels
-                Text(" : \(ticket.customer_name ?? "")")
+                Text(": \(ticket.customer_name ?? "")")
                     .font(.subheadline)
                 Spacer()
                 Button("Details") { showCustomerDetails = true }
@@ -1403,7 +1403,7 @@ struct CustomerInfoView: View {
                 Text("Category")
                     .font(.subheadline)
                     .frame(width: 80, alignment: .leading)
-                Text(" : \(ticket.category_name)")
+                Text(": \(ticket.category_name)")
                     .font(.subheadline)
                     .fontWeight(.bold)
                     .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
@@ -1435,13 +1435,14 @@ struct CustomerInfoView: View {
                     .font(.subheadline)
                     .frame(width: 80, alignment: .leading)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(" : \(ticket.region_name)")
+                    Text(": \(ticket.region_name)")
                         .font(.subheadline)
                         .fontWeight(.bold)
                         .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
-                    Text("View on Google Maps")
+                    Text(" View on Google Maps")
                         .foregroundColor(.blue)
                         .font(.caption)
+                        .padding(.top, 6)
                         .onTapGesture {
                             let fullAddress = "\(ticket.address), \(ticket.city_name ?? ""), \(ticket.state_name ?? ""), \(ticket.region_name)"
                             openInMaps(fullAddress)
@@ -1544,20 +1545,33 @@ struct DetailRow: View {
     }
 }
 
+// Enum to hold either local or remote image
+enum ImageSource {
+    case local(UIImage)
+    case remote(String)
+}
+
 struct UploadsGrid: View {
     var serverMedia: [Multimedia]
     var localMedia: [LocalUpload]
     @State private var addresses: [Int: String] = [:]
-
+    @State private var selectedImageSource: ImageSource? = nil
+    
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 12) {
-            // 🔹 Server media
             // 🔹 Server media
             ForEach(serverMedia, id: \.multimedia_id) { media in
                 VStack {
                     RemoteImageView(url: media.file_name)
                         .frame(width: 100, height: 100)
                         .cornerRadius(8)
+                        .onTapGesture {
+                            let fullURL = media.file_name.hasPrefix("http")
+                                ? media.file_name
+                                : "https://innovative-lifts.blr1.cdn.digitaloceanspaces.com/\(media.file_name.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
+                            
+                            selectedImageSource = .remote(fullURL)
+                        }
 
                     if let lat = media.latitude,
                        let lon = media.longitude,
@@ -1589,6 +1603,11 @@ struct UploadsGrid: View {
                                 .frame(width: 100, height: 100)
                                 .clipped()
                                 .cornerRadius(8)
+                                .onTapGesture {
+                                    print("🖼️ Opening fullscreen with local image")
+                                    selectedImageSource = .local(uiImage)
+                                    print("🖼️ selectedImageSource set to local")
+                                }
                         }
 
                         // 🔹 Status overlay
@@ -1626,11 +1645,140 @@ struct UploadsGrid: View {
                 }
             }
         }
-
         .padding(.vertical)
+        .fullScreenCover(item: $selectedImageSource) { imageSource in
+            FullScreenImageView(imageSource: imageSource) {
+                selectedImageSource = nil
+            }
+        }
     }
 }
 
+// Make ImageSource Identifiable for use with fullScreenCover(item:)
+extension ImageSource: Identifiable {
+    var id: String {
+        switch self {
+        case .local:
+            return "local-\(UUID().uuidString)"
+        case .remote(let url):
+            return "remote-\(url)"
+        }
+    }
+}
+
+struct FullScreenImageView: View {
+    let imageSource: ImageSource
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+
+            switch imageSource {
+            case .local(let uiImage):
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .onAppear {
+                        print("🟢 Showing local image")
+                    }
+                
+            case .remote(let urlString):
+                RemoteFullScreenImage(urlString: urlString)
+                    .onAppear {
+                        print("🌐 RemoteFullScreenImage received URL:", urlString)
+                    }
+            }
+
+            // Close button
+            Button(action: onDismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundColor(.white)
+                    .padding()
+            }
+        }
+    }
+}
+
+struct RemoteFullScreenImage: View {
+    let urlString: String
+    
+    private var url: URL? {
+        // Try to create URL directly first
+        if let directURL = URL(string: urlString) {
+            return directURL
+        }
+        
+        // If that fails, try percent encoding
+        if let encodedString = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let encodedURL = URL(string: encodedString) {
+            return encodedURL
+        }        
+        return nil
+    }
+
+    var body: some View {
+        Group {
+            if let url = url {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .onAppear { print("⏳ AsyncImage started loading:", url) }
+                    case let .success(image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .onAppear { print("✅ Remote image loaded successfully") }
+                    case let .failure(error):
+                        VStack {
+                            Image(systemName: "exclamationmark.triangle")
+                                .foregroundColor(.white)
+                                .font(.system(size: 50))
+                            Text("Failed to load image")
+                                .foregroundColor(.white)
+                                .font(.headline)
+                                .padding(.top)
+                            Text(error.localizedDescription)
+                                .foregroundColor(.gray)
+                                .font(.footnote)
+                                .padding(.top, 4)
+                            Text("URL: \(url.absoluteString)")
+                                .foregroundColor(.gray)
+                                .font(.caption2)
+                                .padding()
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            } else {
+                // Invalid URL
+                VStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundColor(.white)
+                        .font(.system(size: 50))
+                    Text("Invalid URL")
+                        .foregroundColor(.white)
+                        .font(.headline)
+                        .padding(.top)
+                    Text(urlString)
+                        .foregroundColor(.gray)
+                        .font(.caption2)
+                        .padding()
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+}
 struct SectionHeader: View {
     var title: String
     var showPlus: Bool = false
@@ -1751,16 +1899,20 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
 
 struct RemoteImageView: View {
     let url: String
-    private let baseURL = "https://d2plv0g319oam3.cloudfront.net/"
+    private let baseURL = "https://innovative-lifts.blr1.cdn.digitaloceanspaces.com"
 
     var body: some View {
         AsyncImage(
-            url: URL(string: url.hasPrefix("http") ? url : baseURL + url)
+            url: URL(string: url.hasPrefix("http") ? url : "\(baseURL)/\(url.trimmingCharacters(in: CharacterSet(charactersIn: "/")))")
         ) { image in
-            image.resizable().scaledToFill()
+            image
+                .resizable()
+                .scaledToFill()
         } placeholder: {
             ProgressView()
         }
-        .onAppear {}
+        .onAppear {
+            let fullURL = url.hasPrefix("http") ? url : "\(baseURL)/\(url.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
+        }
     }
 }

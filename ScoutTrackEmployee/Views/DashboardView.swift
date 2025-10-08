@@ -32,12 +32,13 @@ struct DashboardView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Ticket Status Distribution")
                                     .font(.headline)
-                                    .padding(.horizontal)
+                                    .padding(.top, 16)
+                                    .padding(.horizontal, 4)
 
                                 HStack(alignment: .top, spacing: 16) {
-                                    // 📊 Custom Pie Chart (iOS 16 compatible)
                                     PieChartView(data: viewModel.pieChartData)
-                                        .frame(width: 180, height: 200)
+                                        .frame(width: 150, height: 170)
+                                        .padding(.leading, 4)
 
                                     // 📋 Scrollable Status Legend
                                     ScrollView(.vertical, showsIndicators: true) {
@@ -59,29 +60,32 @@ struct DashboardView: View {
                                         }
                                         .frame(maxWidth: .infinity)
                                     }
-                                    .frame(height: 200) // 🧭 Match pie chart height
+                                    .frame(height: 170) // Match pie chart height
                                 }
-                                .padding(.horizontal)
+                                .padding(.horizontal, 4) // ✅ Aligns with StatusCards
                                 .padding(.bottom, 8)
                             }
                         }
 
+                        // ✅ Today Tickets Section
                         HStack {
                             Text("Today Tickets")
                                 .font(.headline)
+                                .padding(.horizontal, 4)
                             Spacer()
                             Button("View All") {
                                 navigateToAllTickets = true
                             }
                             .font(.subheadline)
                         }
-                        .padding(.horizontal)
+                        .padding(.horizontal, 4)
+                        .padding(.top, 8)
                         NavigationLink(destination: AllTicketsView(viewModel: viewModel), isActive: $navigateToAllTickets) {
                             EmptyView()
                         }
                         .hidden()
 
-                        // Inside your ScrollView -> Today Tickets section
+                        // ✅ Today Tickets Grid
                         if viewModel.isLoading {
                             ProgressView("Loading tickets...")
                         } else if viewModel.tickets.isEmpty {
@@ -89,8 +93,10 @@ struct DashboardView: View {
                                 .foregroundColor(.gray)
                                 .padding(.vertical, 4)
                         } else {
-                            // ✅ Replace VStack with LazyVGrid
-                            let columns: [GridItem] = Array(repeating: GridItem(.flexible(), spacing: 12), count: UIDevice.current.userInterfaceIdiom == .pad ? 2 : 1)
+                            let columns: [GridItem] = Array(
+                                repeating: GridItem(.flexible(), spacing: 12),
+                                count: UIDevice.current.userInterfaceIdiom == .pad ? 2 : 1
+                            )
 
                             LazyVGrid(columns: columns, spacing: 12) {
                                 ForEach(viewModel.tickets.prefix(6)) { ticket in
@@ -107,7 +113,7 @@ struct DashboardView: View {
                                     .buttonStyle(PlainButtonStyle())
                                 }
                             }
-                            .frame(maxWidth: .infinity) // ✅ Important for full width
+                            .frame(maxWidth: .infinity)
                         }
                     }
                     .padding()
@@ -115,6 +121,7 @@ struct DashboardView: View {
 
                 // Footer Tabs
                 Divider()
+                    .padding(.vertical, 4)
                 HStack {
                     FooterTab(icon: "house", label: "Home", selected: true)
                     Spacer()
@@ -366,7 +373,7 @@ struct TicketCard: View {
                     }
                 }
                 .font(.subheadline)
-                Divider().padding(.vertical, 2) // Less padding for tighter layout
+                Divider()
                 HStack {
                     // Customer Info on the left
                     Label("Customer: \(ticket.customer_name)", systemImage: "person")
@@ -389,7 +396,7 @@ struct TicketCard: View {
                             .buttonStyle(ActionButtonStyle(color: .pink))
                     }
                 }
-                .padding(.top, 4)
+                .padding(.vertical, 6)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)

@@ -21,24 +21,24 @@ class DashboardViewModel: ObservableObject {
     @Published var weeklyToDoCounts: [String: Int] = [:]
     private var cancellables = Set<AnyCancellable>()
     @Published var statusCounts: [String: Int] = [:] // ✅ This will hold all status counts
-    
+
     // ✅ ADD computed properties for individual status counts
     var todoCount: Int {
         return statusCounts["ToDo"] ?? statusCounts["To Do"] ?? statusCounts["todo"] ?? statusCounts["to do"] ?? 0
     }
-    
+
     var inProgressCount: Int {
         return statusCounts["In-Progress"] ?? statusCounts["In Progress"] ?? statusCounts["in-progress"] ?? statusCounts["in progress"] ?? 0
     }
-    
+
     var pendingCount: Int {
         return statusCounts["Pending"] ?? statusCounts["pending"] ?? 0
     }
-    
+
     var onHoldCount: Int {
         return statusCounts["On-Hold"] ?? statusCounts["On Hold"] ?? statusCounts["on-hold"] ?? statusCounts["on hold"] ?? 0
     }
-    
+
     private var userId: String {
         UserDefaults.standard.string(forKey: "userId") ?? "0"
     }

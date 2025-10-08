@@ -229,10 +229,10 @@ struct EventView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                ticketRow(label: "Category ", value: " : \(ticket.category_name)")
-                ticketRow(label: "Address ", value: " : \(ticket.fullAddress)")
-                ticketRow(label: "Customer ", value: " : \(ticket.customer_name)")
-                ticketRow(label: "Phone ", value: " : \(ticket.customer_phone)", isLink: true)
+                ticketRow(label: "Category ", value: "\(ticket.category_name)")
+                ticketRow(label: "Address ", value: "\(ticket.fullAddress)")
+                ticketRow(label: "Customer ", value: "\(ticket.customer_name)")
+                ticketRow(label: "Phone ", value: "\(ticket.customer_phone)", isLink: true)
 
                 // Only show arrival date and time for scheduled tickets
                 if selectedStatus == "Scheduled" {
@@ -276,27 +276,39 @@ struct EventView: View {
 
     @ViewBuilder
     func ticketRow(label: String, value: String, isLink: Bool = false) -> some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .top, spacing: 4) {
             Text(label)
                 .bold()
                 .font(.system(size: 12))
-                .frame(width: 80, alignment: .leading) // fixed width for labels
-            if isLink {
-                if let phoneURL = URL(string: "tel:\(value)") {
-                    Link(value, destination: phoneURL)
-                        .foregroundColor(Color(red: 0, green: 128 / 255, blue: 128 / 255))
-                        .font(.system(size: 12))
+                .frame(width: 70, alignment: .leading)
+
+            // Label and colon stay fixed; value text wraps naturally under it
+            HStack(alignment: .top, spacing: 2) {
+                Text(":")
+                    .bold()
+                    .font(.system(size: 12))
+
+                if isLink {
+                    if let phoneURL = URL(string: "tel:\(value)") {
+                        Link(value, destination: phoneURL)
+                            .foregroundColor(Color(red: 0, green: 128 / 255, blue: 128 / 255))
+                            .font(.system(size: 12))
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text(value)
+                            .foregroundColor(Color(red: 0, green: 128 / 255, blue: 128 / 255))
+                            .font(.system(size: 12))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 } else {
                     Text(value)
                         .foregroundColor(Color(red: 0, green: 128 / 255, blue: 128 / 255))
                         .font(.system(size: 12))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            } else {
-                Text(value)
-                    .foregroundColor(Color(red: 0, green: 128 / 255, blue: 128 / 255))
-                    .font(.system(size: 12))
-                    .fixedSize(horizontal: false, vertical: true)
             }
+
             Spacer()
         }
     }

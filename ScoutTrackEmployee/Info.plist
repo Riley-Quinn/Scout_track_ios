@@ -10,5 +10,11 @@
 <string>We need access to save offline ticket images.</string>
 <key>NSPhotoLibraryUsageDescription</key>
 <string>We need access to show offline images.</string>
+<key>NSLocalNetworkUsageDescription</key>
+<string>This app needs access to the local network for development purposes.</string>
+<key>NSBonjourServices</key>
+<array>
+    <string>_http._tcp</string>
+</array>
 </dict>
 </plist>

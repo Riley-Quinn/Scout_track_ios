@@ -5,9 +5,8 @@ import UIKit
 // MARK: - Login View
 
 struct LoginView: View {
-    @State private var email = "testemp@gmail.com"
-    @State private var password = "Password123!"
-    @State private var rememberMe = false
+    @State private var email = ""
+    @State private var password = ""
     @State private var isLoading = false
     @State private var alertMessage = ""
     @State private var showAlert = false
@@ -34,7 +33,7 @@ struct LoginView: View {
                             .frame(width: 160, height: 160)
                             .clipShape(Circle())
 
-                        Text("Welcome Back!")
+                        Text("Welcome!")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
@@ -66,26 +65,6 @@ struct LoginView: View {
                             .padding(.top)
                             .padding(.horizontal)
                         }
-
-                        // Remember Me + Forgot Password
-                        HStack {
-                            Toggle(isOn: $rememberMe) {
-                                Text("Remember Me")
-                                    .font(.subheadline)
-                                    .foregroundColor(.white)
-                            }
-                            .toggleStyle(CheckboxToggleStyle())
-
-                            Spacer()
-
-                            Button("Forgot Password?") {}
-                                .font(.subheadline)
-                                .foregroundColor(.white)
-                                .underline()
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 10)
-
                         Spacer(minLength: geo.size.height * 0.1) // Bottom spacing
                     }
                     .frame(minHeight: geo.size.height)
@@ -124,7 +103,7 @@ struct LoginView: View {
         let body: [String: Any] = [
             "email": email,
             "password": password,
-            "rememberMe": rememberMe,
+            "rememberMe": true,
         ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
@@ -163,6 +142,9 @@ struct LoginView: View {
                     DispatchQueue.main.async {
                         self.alertMessage = "Login successful"
                         self.showAlert = true
+                        if let appDelegate = UIApplication.shared.delegate as? AppDelegate {
+                            appDelegate.setupFCM()
+                        }
                     }
                 }
             } else {
@@ -225,19 +207,6 @@ struct CustomTextField: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color.gray.opacity(0.5), lineWidth: 1)
         )
-    }
-}
-
-struct CheckboxToggleStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Button(action: { configuration.isOn.toggle() }) {
-            HStack {
-                Image(systemName: configuration.isOn ? "checkmark.square" : "square")
-                    .foregroundColor(configuration.isOn ? Color(hex: "#FF6B00") : .gray)
-                configuration.label
-            }
-        }
-        .buttonStyle(PlainButtonStyle())
     }
 }
 
