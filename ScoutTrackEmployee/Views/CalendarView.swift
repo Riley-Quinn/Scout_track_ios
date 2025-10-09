@@ -286,39 +286,42 @@ struct CalendarView: View {
     }
 
     private func ticketRow(_ ticket: CalendarTicket) -> some View {
-        HStack(spacing: 8) {
-            // Left column (time / status)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(timeString(from: ticket.date))
-                    .font(.caption)
-                    .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
-                Text(ticket.status_name ?? "")
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(color(for: ticket.status_name))
-            }
-            .frame(width: 60, alignment: .leading)
+        NavigationLink(destination: TicketDetailView(ticketId: Int(ticket.ticket_id) ?? 0)) {
+            HStack(spacing: 8) {
+                // Left column (time / status)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(timeString(from: ticket.date))
+                        .font(.caption)
+                        .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
+                    Text(ticket.status_name ?? "")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(color(for: ticket.status_name))
+                }
+                .frame(width: 60, alignment: .leading)
 
-            // Middle divider (single for both lines)
-            Rectangle()
-                .fill(Color.gray.opacity(0.6))
-                .frame(width: 3)
-                .padding(.vertical, 0) // spans full height of HStack automatically
+                // Middle divider (single for both lines)
+                Rectangle()
+                    .fill(Color.gray.opacity(0.6))
+                    .frame(width: 3)
+                    .padding(.vertical, 0) // spans full height of HStack automatically
 
-            // Right column (title / region)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(ticket.title ?? "No Title")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-                Text(ticket.region_name ?? "")
-                    .font(.caption2)
-                    .foregroundColor(.gray)
+                // Right column (title / region)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ticket.title ?? "No Title")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                    Text(ticket.region_name ?? "")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+            .padding(.horizontal, 16)
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 16)
+        .buttonStyle(PlainButtonStyle()) // removes default NavigationLink styling
     }
 
     // Helper function to get color based on status

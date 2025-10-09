@@ -990,12 +990,12 @@ struct TicketDetailView: View {
                                         showUploadDialog = true
                                     }
                                     .confirmationDialog("Choose Upload Option", isPresented: $showUploadDialog) {
-                                        // Button("Camera") {
-                                        //     isCamera = true
-                                        //     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        //         showImagePicker = true
-                                        //     }
-                                        // }
+                                        Button("Camera") {
+                                            isCamera = true
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                showImagePicker = true
+                                            }
+                                        }
                                         Button("Gallery") {
                                             isCamera = false
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -1030,12 +1030,12 @@ struct TicketDetailView: View {
                                         showUploadDialog = true
                                     }
                                     .confirmationDialog("Choose Upload Option", isPresented: $showUploadDialog) {
-                                        // Button("Camera") {
-                                        //     isCamera = true
-                                        //     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        //         showImagePicker = true
-                                        //     }
-                                        // }
+                                        Button("Camera") {
+                                            isCamera = true
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                showImagePicker = true
+                                            }
+                                        }
                                         Button("Gallery") {
                                             isCamera = false
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -1110,10 +1110,10 @@ struct TicketDetailView: View {
                 viewModel.retryPendingUploads()
             }
             .confirmationDialog("Choose Upload Option", isPresented: $showUploadDialog) {
-                // Button("Camera") {
-                //     isCamera = true
-                //     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { showImagePicker = true }
-                // }
+                Button("Camera") {
+                    isCamera = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { showImagePicker = true }
+                }
                 Button("Gallery") {
                     isCamera = false
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { showImagePicker = true }
