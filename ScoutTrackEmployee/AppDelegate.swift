@@ -1,103 +1,121 @@
+import UIKit
 import FirebaseCore
 import FirebaseMessaging
-import UIKit
 import UserNotifications
+import SwiftUI
 
-class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
-    func application(_: UIApplication,
-                     didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool
-    {
-        print("🚀 AppDelegate didFinishLaunchingWithOptions")
+class AppDelegate: NSObject, UIApplicationDelegate, ObservableObject, MessagingDelegate, UNUserNotificationCenterDelegate {
 
+    @Published var fcmToken: String?
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil
+    ) -> Bool {
         FirebaseApp.configure()
-        print("✅ Firebase configured")
 
-        UNUserNotificationCenter.current().delegate = self
         Messaging.messaging().delegate = self
+        UNUserNotificationCenter.current().delegate = self
 
         return true
     }
 
-    // ✅ Call this after login
-    func setupFCM() {
-        print("🔔 setupFCM called")
-        requestNotificationPermission()
-        DispatchQueue.main.async {
-            print("📲 Registering for remote notifications")
-            UIApplication.shared.registerForRemoteNotifications()
-        }
-    }
+    // MARK: - Notification Permission & Remote Registration
 
-    func requestNotificationPermission() {
-        print("📢 Asking for notification permission...")
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-            if let error = error {
-                print("❌ Error requesting permission: \(error.localizedDescription)")
-                return
+    func requestNotificationPermission(completion: @escaping () -> Void) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            DispatchQueue.main.async {
+                if granted {
+                    UIApplication.shared.registerForRemoteNotifications()
+                }
+                completion()
             }
-            print("🔑 Permission response received: \(granted ? "GRANTED ✅" : "DENIED ❌")")
         }
     }
 
-    func application(_: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        print("📲 APNs device token received: \(deviceToken.map { String(format: "%02.2hhx", $0) }.joined())")
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
         Messaging.messaging().apnsToken = deviceToken
+        // After APNs token is set, fetch FCM token
+        fetchFCMTokenIfReady()
     }
 
-    func application(_: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
         print("❌ Failed to register for remote notifications: \(error.localizedDescription)")
     }
 
-    func messaging(_: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        guard let token = fcmToken else {
-            print("⚠️ No FCM token received")
-            return
-        }
-        print("✅ FCM Token received: \(token)")
+    // MARK: - Fetch & Send FCM Token
 
-        sendFCMTokenToBackend(token: token)
-    }
-
-    func sendFCMTokenToBackend(token: String) {
-        guard let userId = UserDefaults.standard.string(forKey: "userId") else {
-            print("❌ No logged-in user found in UserDefaults")
+    func fetchFCMTokenIfReady() {
+        guard let _ = UserDefaults.standard.string(forKey: "userId"),
+              let _ = UserDefaults.standard.string(forKey: "clientId") else {
             return
         }
 
-        let clientId = UserDefaults.standard.string(forKey: "clientId") ?? "0"
-        print("📤 Preparing to send FCM token. employee_id=\(userId), client_id=\(clientId)")
-
-        guard let url = URL(string: "\(Config.baseURL)/fcm_tokens/store-token") else {
-            print("❌ Invalid URL for backend")
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: Any] = [
-            "employee_id": Int(userId) ?? 0,
-            "client_id": Int(clientId) ?? 0,
-            "fcm_token": token,
-        ]
-
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        print("📤 Sending body: \(body)")
-
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        Messaging.messaging().token { token, error in
             if let error = error {
-                print("❌ Error sending FCM token: \(error.localizedDescription)")
+                print("⚠️ Error fetching FCM token: \(error.localizedDescription)")
                 return
             }
-
-            if let httpResponse = response as? HTTPURLResponse {
-                print("📡 Backend responded with status: \(httpResponse.statusCode)")
+            guard let token = token else {
+                print("⚠️ FCM token is nil")
+                return
             }
+            self.fcmToken = token
+            self.sendFCMTokenToBackend(token: token)
+        }
+    }
 
-            if let data = data, let json = String(data: data, encoding: .utf8) {
-                print("📩 Backend response body: \(json)")
+private func sendFCMTokenToBackend(token: String) {
+    guard let employeeId = UserDefaults.standard.string(forKey: "userId") else {
+        return
+    }
+
+    let body: [String: Any] = [
+        "fcm_token": token,       // <-- corrected key
+        "employee_id": employeeId
+    ]
+
+    let url = URL(string: "\(Config.baseURL)/api/fcm-tokens/store-token")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+    print("🔄 Sending FCM token to backend with body: \(body)")
+
+    URLSession.shared.dataTask(with: request) { data, response, error in
+        if let error = error {
+            print("❌ Failed to send FCM token: \(error.localizedDescription)")
+            return
+        }
+
+        if let httpResp = response as? HTTPURLResponse {
+            print("📤 Backend response code: \(httpResp.statusCode)")
+            if httpResp.statusCode == 200 {
+                print("✅ FCM token sent successfully")
+            } else {
+                if let data = data, let msg = String(data: data, encoding: .utf8) {
+                    print("⚠️ Backend error: \(msg)")
+                }
+                print("❌ Failed to send token to backend")
             }
-        }.resume()
+        }
+    }.resume()
+}
+
+
+
+    // MARK: - Messaging Delegate
+
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        guard let token = fcmToken else { return }
+        // Send token to backend if user already logged in
+        fetchFCMTokenIfReady()
     }
 }

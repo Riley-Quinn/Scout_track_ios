@@ -14,12 +14,14 @@ struct ScoutTrackEmployeeApp: App {
                 NavigationView {
                     DashboardView()
                         .environment(\.managedObjectContext, persistenceController.container.viewContext)
+                        .environmentObject(appDelegate) 
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
             } else {
                 LoginView()
                     .environment(\.managedObjectContext, persistenceController.container.viewContext)
-                    .navigationViewStyle(StackNavigationViewStyle()) // Force full screen
+                    .environmentObject(appDelegate) 
+                    .navigationViewStyle(StackNavigationViewStyle())
             }
         }
     }

@@ -1,15 +1,16 @@
-import CoreData
 import SwiftUI
+import CoreData
 import UIKit
 
 // MARK: - Login View
-
 struct LoginView: View {
-    @State private var email = ""
-    @State private var password = ""
+    @EnvironmentObject var appDelegate: AppDelegate
+    @State private var email = "testemp@gmail.com"
+    @State private var password = "Password123!"
     @State private var isLoading = false
     @State private var alertMessage = ""
     @State private var showAlert = false
+    @State private var showPermissionDialog = false
 
     @AppStorage("sessionActive") private var sessionActive: Bool = false
 
@@ -70,6 +71,14 @@ struct LoginView: View {
                     .frame(minHeight: geo.size.height)
                 }
             }
+
+            if showPermissionDialog {
+                PermissionDialogView(
+                    isPresented: $showPermissionDialog,
+                    onAllow: { handlePermissionAllow() },
+                    onDeny: { handlePermissionDeny() }
+                )
+            }
         }
         .alert(isPresented: $showAlert) {
             Alert(
@@ -84,8 +93,7 @@ struct LoginView: View {
         }
     }
 
-    // MARK: - Login API Call
-
+    // MARK: - Login Logic (Online + Offline)
     private func handleLogin() {
         guard !email.isEmpty, !password.isEmpty else {
             alertMessage = "Please enter email and password"
@@ -94,89 +102,114 @@ struct LoginView: View {
         }
 
         isLoading = true
-
         let url = URL(string: "\(Config.baseURL)/api/auth/admin/login")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: Any] = [
-            "email": email,
-            "password": password,
-            "rememberMe": true,
-        ]
+        let body: [String: Any] = ["email": email, "password": password, "rememberMe": true]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         URLSession.shared.dataTask(with: request) { data, response, error in
             DispatchQueue.main.async { self.isLoading = false }
 
-            if let _ = error {
-                checkOfflineLogin()
-                return
-            }
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                checkOfflineLogin()
-                return
-            }
-
-            if httpResponse.statusCode == 200, let data = data {
-                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let empData = json["empData"] as? [String: Any]
-                {
-                    UserDefaults.standard.set(empData["userId"], forKey: "userId")
-                    UserDefaults.standard.set(empData["name"], forKey: "name")
-                    UserDefaults.standard.set(empData["Role"], forKey: "Role")
-                    UserDefaults.standard.set(empData["client_id"], forKey: "clientId")
-
-                    let newUser = User(context: context)
-                    newUser.userId = empData["userId"] as? String ?? ""
-                    newUser.name = empData["name"] as? String ?? ""
-                    newUser.role = empData["Role"] as? String ?? ""
-                    newUser.clientId = empData["client_id"] as? String ?? ""
-                    newUser.email = email
-                    newUser.password = password
-
-                    try? context.save()
-
-                    DispatchQueue.main.async {
-                        self.alertMessage = "Login successful"
-                        self.showAlert = true
-                        if let appDelegate = UIApplication.shared.delegate as? AppDelegate {
-                            appDelegate.setupFCM()
-                        }
-                    }
+            if let error = error {
+                print("⚠️ Login error: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    // Try offline login if no internet
+                    self.handleOfflineLogin()
                 }
-            } else {
+                return
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200,
+                  let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let empData = json["empData"] as? [String: Any] else {
                 DispatchQueue.main.async {
                     self.alertMessage = "Invalid email or password"
                     self.showAlert = true
                 }
+                return
             }
-        }.resume()
-    }
 
-    private func checkOfflineLogin() {
-        let request = User.fetchRequest()
-        if let savedUser = try? context.fetch(request).first,
-           savedUser.email == email, savedUser.password == password
-        {
-            DispatchQueue.main.async {
-                self.alertMessage = "Offline login successful"
-                self.showAlert = true
-                self.sessionActive = true
-            }
-            return
-        }
-        DispatchQueue.main.async {
-            self.alertMessage = "Login failed (offline mode)"
-            self.showAlert = true
+DispatchQueue.main.async {
+    saveUserData(empData)
+    appDelegate.requestNotificationPermission {
+        // Wait a bit for APNs registration to complete
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            appDelegate.fetchFCMTokenIfReady()
+            navigateToDashboard()
         }
     }
 }
 
-// MARK: - UI Components
+        }.resume()
+    }
 
+    // MARK: - Offline Login
+    private func handleOfflineLogin() {
+        let fetchRequest: NSFetchRequest<User> = User.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "email == %@ AND password == %@", email, password)
+
+        do {
+            let results = try context.fetch(fetchRequest)
+            if let _ = results.first {
+                print("✅ Offline login success")
+                navigateToDashboard()
+            } else {
+                self.alertMessage = "Offline login failed. Please connect to the internet."
+                self.showAlert = true
+            }
+        } catch {
+            self.alertMessage = "Error checking offline login"
+            self.showAlert = true
+        }
+    }
+
+    // MARK: - Save User to CoreData + Defaults
+    private func saveUserData(_ empData: [String: Any]) {
+        UserDefaults.standard.set(empData["userId"], forKey: "userId")
+        UserDefaults.standard.set(empData["name"], forKey: "name")
+        UserDefaults.standard.set(empData["Role"], forKey: "Role")
+        UserDefaults.standard.set(empData["client_id"], forKey: "clientId")
+
+        let newUser = User(context: context)
+        newUser.userId = empData["userId"] as? String ?? ""
+        newUser.name = empData["name"] as? String ?? ""
+        newUser.role = empData["Role"] as? String ?? ""
+        newUser.clientId = empData["client_id"] as? String ?? ""
+        newUser.email = email
+        newUser.password = password
+
+        do {
+            try context.save()
+            print("💾 User saved to CoreData")
+        } catch {
+            print("❌ Failed to save user: \(error)")
+        }
+    }
+
+    // MARK: - Permission Dialog Handling
+    private func handlePermissionAllow() {
+        showPermissionDialog = false
+        appDelegate.requestNotificationPermission {
+            appDelegate.fetchFCMTokenIfReady()
+            navigateToDashboard()
+        }
+    }
+
+    private func handlePermissionDeny() {
+        showPermissionDialog = false
+        navigateToDashboard()
+    }
+
+    private func navigateToDashboard() {
+        sessionActive = true
+        print("🚀 Navigated to dashboard")
+    }
+}
+
+// MARK: - Custom TextField
 struct CustomTextField: View {
     let icon: String
     let placeholder: String
@@ -210,6 +243,57 @@ struct CustomTextField: View {
     }
 }
 
+// MARK: - Permission Dialog View
+struct PermissionDialogView: View {
+    @Binding var isPresented: Bool
+    let onAllow: () -> Void
+    let onDeny: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.4).ignoresSafeArea()
+            VStack(spacing: 20) {
+                Image(systemName: "bell.badge.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(Color(hex: "#FF6B00"))
+                Text("Enable Notifications")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .multilineTextAlignment(.center)
+                Text("Stay updated with important alerts and messages. You can change this anytime in Settings.")
+                    .font(.body)
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+
+                VStack(spacing: 12) {
+                    Button("Allow", action: onAllow)
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color(hex: "#FF6B00"))
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    Button("Don't Allow", action: onDeny)
+                        .fontWeight(.medium)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.gray.opacity(0.2))
+                        .foregroundColor(.gray)
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+            .frame(width: 320)
+            .background(Color.white)
+            .cornerRadius(20)
+            .shadow(radius: 20)
+        }
+    }
+}
+
+// MARK: - Color Extension
 extension Color {
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)

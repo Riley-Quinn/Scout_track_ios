@@ -254,7 +254,7 @@ class DashboardViewModel: ObservableObject {
         URLSession.shared.dataTaskPublisher(for: request)
             .handleEvents(receiveOutput: { output in
                 if let jsonString = String(data: output.data, encoding: .utf8) {
-                    print("Raw Response: \(jsonString)")
+                    // print("Raw Response: \(jsonString)")
                 }
             })
             .map { $0.data }
