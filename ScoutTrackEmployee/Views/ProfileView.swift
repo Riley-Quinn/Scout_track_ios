@@ -108,6 +108,7 @@ struct ProfileView: View {
                 .padding()
             }
         }
+        .background(Color.white)
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarBackButtonHidden(true)
         .navigationBarHidden(true)

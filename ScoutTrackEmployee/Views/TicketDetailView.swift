@@ -1082,7 +1082,7 @@ struct TicketDetailView: View {
                                 HStack {
                                     TextField("Type a message...", text: $newMessage)
                                         .padding(8)
-                                        .background(Color(.systemGray6))
+                                        .background(Color(.gray))
                                         .cornerRadius(8)
 
                                     Button(action: {
@@ -1184,11 +1184,51 @@ struct TicketDetailView: View {
                     .shadow(radius: 10)
             }
         }
-        .sheet(isPresented: $viewModelticket.showServiceUpdateSheet) {
-            ServiceUpdateSheetTicket(viewModel: viewModelticket)
+        .background(Color.white)
+        .overlay {
+            if viewModelticket.showServiceUpdateSheet {
+                ZStack {
+                    // Dim background
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            viewModelticket.showServiceUpdateSheet = false
+                        }
+
+                    // Centered modal box
+                    ServiceUpdateSheetTicket(viewModel: viewModelticket)
+                        .frame(width: 320)
+                        .padding()
+                        .background(Color.white)
+                        .cornerRadius(16)
+                        .shadow(radius: 10)
+                }
+                .transition(.scale)
+                .animation(.easeInOut, value: viewModelticket.showServiceUpdateSheet)
+            }
         }
-        .sheet(isPresented: $viewModelticket.showEditSheet) {
-            EditTicketSheetTicket(viewModel: viewModelticket, ticketDetailVM: viewModel)
+
+        .overlay {
+            if viewModelticket.showEditSheet {
+                ZStack {
+                    // Dimmed background
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            viewModelticket.showEditSheet = false
+                        }
+
+                    // Centered popup modal
+                    EditTicketSheetTicket(viewModel: viewModelticket, ticketDetailVM: viewModel)
+                        .frame(width: 320)
+                        .padding()
+                        .background(Color.white)
+                        .cornerRadius(16)
+                        .shadow(radius: 10)
+                }
+                .transition(.scale)
+                .animation(.easeInOut, value: viewModelticket.showEditSheet)
+            }
         }
     }
 }
@@ -1213,23 +1253,31 @@ struct ServiceUpdateSheetTicket: View {
         VStack(spacing: 20) {
             Text("Service Update")
                 .font(.headline)
+                .foregroundColor(.black)
 
-            // Dropdown using Picker
-            Picker("Select Reason", selection: $viewModel.serviceReason) {
+            // Picker styled as text box
+            Menu {
                 ForEach(viewModel.serviceReasons, id: \.self) { reason in
-                    Text(reason).tag(reason)
+                    Button(reason) {
+                        viewModel.serviceReason = reason
+                    }
                 }
+            } label: {
+                HStack {
+                    Text(viewModel.serviceReason.isEmpty ? "Select Reason" : viewModel.serviceReason)
+                        .foregroundColor(viewModel.serviceReason.isEmpty ? .gray : .black)
+                    Spacer()
+                }
+                .padding()
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(8)
             }
-            .pickerStyle(MenuPickerStyle())
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(8)
 
-            // Custom reason if 'Other' selected
+            // If "Other" is selected, show input field
             if viewModel.serviceReason == "Other" {
                 TextField("Enter custom reason", text: $viewModel.customServiceReason)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .foregroundColor(.black)
                     .padding(.horizontal)
             }
 
@@ -1242,8 +1290,7 @@ struct ServiceUpdateSheetTicket: View {
                 Button("Save") {
                     viewModel.handleServiceUpdate()
                 }
-                .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
-                ))
+                .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)))
             }
         }
         .padding()
@@ -1252,32 +1299,46 @@ struct ServiceUpdateSheetTicket: View {
 
 struct EditTicketSheetTicket: View {
     @ObservedObject var viewModel: DashboardViewModel
-    // @State private var showUploadAlert = false // 🔔 State for alert
     @ObservedObject var ticketDetailVM: TicketDetailViewModel
 
     var body: some View {
         VStack(spacing: 20) {
             Text("Update Ticket Status")
                 .font(.headline)
+                .foregroundColor(.black)
 
-            Picker("Select Status", selection: $viewModel.editStatus) {
+            // Menu styled as a text box
+            Menu {
                 ForEach(viewModel.editStatuses, id: \.self) { status in
-                    Text(status).tag(status)
+                    Button(status) {
+                        viewModel.editStatus = status
+                    }
                 }
+            } label: {
+                HStack {
+                    Text(viewModel.editStatus.isEmpty ? "Select Status" : viewModel.editStatus)
+                        .foregroundColor(viewModel.editStatus.isEmpty ? .gray : .black)
+                    Spacer()
+                }
+                .padding()
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(8)
             }
-            .pickerStyle(SegmentedPickerStyle())
-            .padding()
 
             // Show reason only for On Hold or Pending
             if viewModel.editStatus == "On Hold" || viewModel.editStatus == "Pending" {
                 TextField("Enter reason", text: $viewModel.editReason)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .foregroundColor(.black)
                     .padding(.horizontal)
             }
 
             HStack {
-                Button("Cancel") { viewModel.showEditSheet = false }
-                    .buttonStyle(ActionButtonStyle(color: .gray))
+                Button("Cancel") {
+                    viewModel.showEditSheet = false
+                }
+                .buttonStyle(ActionButtonStyle(color: .gray))
+
                 Button("Save") {
                     viewModel.updateTicketStatus { updatedTicket in
                         if let updated = updatedTicket {
@@ -1373,8 +1434,10 @@ struct CustomerInfoView: View {
                 Text("Customer")
                     .font(.subheadline)
                     .frame(width: 80, alignment: .leading) // fixed width for labels
+                    .foregroundColor(.black)
                 Text(": \(ticket.customer_name ?? "")")
                     .font(.subheadline)
+                    .foregroundColor(.black)
                 Spacer()
                 Button("Details") { showCustomerDetails = true }
                     .font(.caption)
@@ -1389,6 +1452,7 @@ struct CustomerInfoView: View {
                 Text("Priority")
                     .font(.subheadline)
                     .frame(width: 80, alignment: .leading)
+                    .foregroundColor(.black)
                 Text(": \(ticket.priority_rank ?? "NA")")
                     .font(.subheadline)
                     .foregroundColor(.red)
@@ -1403,6 +1467,7 @@ struct CustomerInfoView: View {
                 Text("Category")
                     .font(.subheadline)
                     .frame(width: 80, alignment: .leading)
+                    .foregroundColor(.black)
                 Text(": \(ticket.category_name)")
                     .font(.subheadline)
                     .fontWeight(.bold)
@@ -1419,10 +1484,11 @@ struct CustomerInfoView: View {
                 Text("Created")
                     .font(.subheadline)
                     .frame(width: 80, alignment: .leading)
+                    .foregroundColor(.black)
 
                 Text(": \(ticket.created_at.split(separator: "T").first ?? "")")
                     .font(.subheadline)
-
+                    .foregroundColor(.black)
                 Spacer()
             }
 
@@ -1434,6 +1500,7 @@ struct CustomerInfoView: View {
                 Text("Location")
                     .font(.subheadline)
                     .frame(width: 80, alignment: .leading)
+                    .foregroundColor(.black)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(": \(ticket.region_name)")
                         .font(.subheadline)
@@ -1482,6 +1549,7 @@ struct CustomerInfoView: View {
                 HStack {
                     Text(ticket.customer_type?.lowercased() == "company" ? "Company Details" : "Customer Details")
                         .font(.headline)
+                        .foregroundColor(.black)
                     Spacer()
                     Button("Close") { showCustomerDetails = false }
                 }
@@ -1493,6 +1561,7 @@ struct CustomerInfoView: View {
                 Spacer()
             }
             .padding()
+            .background(Color.white)
         }
     }
 }
@@ -1514,6 +1583,7 @@ struct TicketDetailSection: View {
             DetailRow(label: "Address Type", value: ticket.address_type ?? "N/A")
             DetailRow(label: "Address", value: ticket.address)
         }
+        .foregroundColor(.black)
     }
 }
 
@@ -1819,8 +1889,8 @@ struct HistoryRow: View {
                 Circle().fill(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255).opacity(0.9))
                     .frame(width: 10, height: 10)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(status).font(.subheadline).bold()
-                    Text(employee).font(.caption)
+                    Text(status).font(.subheadline).bold().foregroundColor(.black)
+                    Text(employee).font(.caption).foregroundColor(.gray)
                     Text(time).font(.caption2).foregroundColor(.gray)
                 }
             }

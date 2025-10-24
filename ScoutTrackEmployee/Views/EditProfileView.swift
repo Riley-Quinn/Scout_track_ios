@@ -68,14 +68,17 @@ struct EditProfileView: View {
                         Group {
                             TextField("Full Name", text: $name)
                                 .textFieldStyleCustom()
+                                .foregroundColor(.black)
 
                             TextField("Phone Number", text: $phone)
                                 .keyboardType(.phonePad)
                                 .textFieldStyleCustom()
+                                .foregroundColor(.black)
 
                             TextField("Email Address", text: $email)
                                 .keyboardType(.emailAddress)
                                 .textFieldStyleCustom()
+                                .foregroundColor(.black)
                         }
 
                         // Update Button
@@ -95,6 +98,7 @@ struct EditProfileView: View {
                 .padding(.horizontal, 20)
             }
         }
+        .background(Color.white)
         .edgesIgnoringSafeArea(.top)
         .onAppear(perform: fetchProfile)
         .alert(isPresented: $showSuccessAlert) { // NEW ALERT

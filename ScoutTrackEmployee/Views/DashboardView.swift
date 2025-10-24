@@ -6,150 +6,163 @@ struct DashboardView: View {
     @StateObject private var viewModel = DashboardViewModel()
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Header
-                HStack {
-                    Text("Dashboard")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    Spacer()
-                }
-                .padding()
-                .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
-                ScrollView {
-                    VStack(spacing: 8) {
-                        // ✅ Status Grid
-                        HStack(spacing: 12) {
-                            StatusCard(title: "ToDo", count: viewModel.todoCount, color: .orange, icon: "exclamationmark.triangle")
-                            StatusCard(title: "In Progress", count: viewModel.inProgressCount, color: .blue, icon: "shield")
-                        }
-                        HStack(spacing: 12) {
-                            StatusCard(title: "Pending", count: viewModel.pendingCount, color: .purple, icon: "clock")
-                            StatusCard(title: "On Hold", count: viewModel.onHoldCount, color: .pink, icon: "clock")
-                        }
+            ZStack {
+                Color.white
+                    .ignoresSafeArea()
+                VStack(spacing: 0) {
+                    // Header
+                    HStack {
+                        Text("Dashboard")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        Spacer()
+                    }
+                    .padding()
+                    .background(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255))
+                    ScrollView {
+                        VStack(spacing: 8) {
+                            // ✅ Status Grid
+                            HStack(spacing: 12) {
+                                StatusCard(title: "ToDo", count: viewModel.todoCount, color: .orange, icon: "exclamationmark.triangle")
+                                StatusCard(title: "In Progress", count: viewModel.inProgressCount, color: .blue, icon: "shield")
+                            }
+                            HStack(spacing: 12) {
+                                StatusCard(title: "Pending", count: viewModel.pendingCount, color: .purple, icon: "clock")
+                                StatusCard(title: "On Hold", count: viewModel.onHoldCount, color: .pink, icon: "clock")
+                            }
 
-                        if !viewModel.pieChartData.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Ticket Status Distribution")
-                                    .font(.headline)
-                                    .padding(.top, 16)
-                                    .padding(.horizontal, 4)
+                            if !viewModel.pieChartData.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Ticket Status Distribution")
+                                        .font(.headline)
+                                        .padding(.top, 16)
+                                        .padding(.horizontal, 4)
+                                        .foregroundColor(.black)
 
-                                HStack(alignment: .top, spacing: 16) {
-                                    PieChartView(data: viewModel.pieChartData)
-                                        .frame(width: 150, height: 170)
-                                        .padding(.leading, 4)
+                                    HStack(alignment: .top, spacing: 16) {
+                                        PieChartView(data: viewModel.pieChartData)
+                                            .frame(width: 150, height: 170)
+                                            .padding(.leading, 4)
 
-                                    // 📋 Scrollable Status Legend
-                                    ScrollView(.vertical, showsIndicators: true) {
-                                        VStack(alignment: .leading, spacing: 8) {
-                                            ForEach(viewModel.pieChartData) { data in
-                                                HStack(spacing: 8) {
-                                                    Circle()
-                                                        .fill(data.color)
-                                                        .frame(width: 12, height: 12)
-                                                    Text("\(data.status) - \(Int(data.percentage * 100))%")
-                                                        .font(.subheadline)
-                                                        .foregroundColor(.primary)
-                                                    Spacer()
-                                                    Text("(\(data.count))")
-                                                        .font(.subheadline)
-                                                        .foregroundColor(.secondary)
+                                        // 📋 Scrollable Status Legend
+                                        ScrollView(.vertical, showsIndicators: true) {
+                                            VStack(alignment: .leading, spacing: 8) {
+                                                ForEach(viewModel.pieChartData) { data in
+                                                    HStack(spacing: 8) {
+                                                        Circle()
+                                                            .fill(data.color)
+                                                            .frame(width: 12, height: 12)
+                                                        Text("\(data.status) - \(Int(data.percentage * 100))%")
+                                                            .font(.subheadline)
+                                                            .foregroundColor(.black)
+                                                        Spacer()
+                                                        Text("(\(data.count))")
+                                                            .font(.subheadline)
+                                                            .foregroundColor(.black)
+                                                    }
                                                 }
                                             }
+                                            .frame(maxWidth: .infinity)
                                         }
-                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 170) // Match pie chart height
                                     }
-                                    .frame(height: 170) // Match pie chart height
-                                }
-                                .padding(.horizontal, 4) // ✅ Aligns with StatusCards
-                                .padding(.bottom, 8)
-                            }
-                        }
-
-                        // ✅ Today Tickets Section
-                        HStack {
-                            Text("Today Tickets")
-                                .font(.headline)
-                                .padding(.horizontal, 4)
-                            Spacer()
-                            Button("View All") {
-                                navigateToAllTickets = true
-                            }
-                            .font(.subheadline)
-                        }
-                        .padding(.horizontal, 4)
-                        .padding(.top, 8)
-                        NavigationLink(destination: AllTicketsView(viewModel: viewModel), isActive: $navigateToAllTickets) {
-                            EmptyView()
-                        }
-                        .hidden()
-
-                        // ✅ Today Tickets Grid
-                        if viewModel.isLoading {
-                            ProgressView("Loading tickets...")
-                        } else if viewModel.tickets.isEmpty {
-                            Text("No ToDo tickets today")
-                                .foregroundColor(.gray)
-                                .padding(.vertical, 4)
-                        } else {
-                            let columns: [GridItem] = Array(
-                                repeating: GridItem(.flexible(), spacing: 12),
-                                count: UIDevice.current.userInterfaceIdiom == .pad ? 2 : 1
-                            )
-
-                            LazyVGrid(columns: columns, spacing: 12) {
-                                ForEach(viewModel.tickets.prefix(6)) { ticket in
-                                    NavigationLink(destination: TicketDetailView(ticketId: ticket.ticket_id)) {
-                                        TicketCard(
-                                            ticket: ticket,
-                                            onAssign: { /* Logic */ },
-                                            onSetArrival: { /* Logic */ },
-                                            onStartWork: { viewModel.startWork(ticket: ticket) },
-                                            onServiceUpdate: { viewModel.selectedTicket = ticket; viewModel.showServiceUpdateSheet = true },
-                                            onEdit: { viewModel.selectedTicket = ticket; viewModel.showEditSheet = true }
-                                        )
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
+                                    .padding(.horizontal, 4) // ✅ Aligns with StatusCards
+                                    .padding(.bottom, 8)
                                 }
                             }
-                            .frame(maxWidth: .infinity)
+                            // ✅ Today Tickets Section
+                            HStack {
+                                Text("Today Tickets")
+                                    .font(.headline)
+                                    .padding(.horizontal, 4)
+                                    .foregroundColor(.black)
+                                Spacer()
+                                Button("View All") {
+                                    navigateToAllTickets = true
+                                }
+                                .font(.subheadline)
+                            }
+                            .padding(.horizontal, 4)
+                            .padding(.top, 8)
+                            NavigationLink(destination: AllTicketsView(viewModel: viewModel), isActive: $navigateToAllTickets) {
+                                EmptyView()
+                            }
+                            .hidden()
+
+                            // ✅ Today Tickets Grid
+                            if viewModel.isLoading {
+                                ProgressView("Loading tickets...")
+                            } else if viewModel.tickets.isEmpty {
+                                Text("No ToDo tickets today")
+                                    .foregroundColor(.gray)
+                                    .padding(.vertical, 4)
+                            } else {
+                                let columns: [GridItem] = Array(
+                                    repeating: GridItem(.flexible(), spacing: 12),
+                                    count: UIDevice.current.userInterfaceIdiom == .pad ? 2 : 1
+                                )
+
+                                LazyVGrid(columns: columns, spacing: 12) {
+                                    ForEach(viewModel.tickets.prefix(6)) { ticket in
+                                        NavigationLink(destination: TicketDetailView(ticketId: ticket.ticket_id)) {
+                                            TicketCard(
+                                                ticket: ticket,
+                                                onAssign: { /* Logic */ },
+                                                onSetArrival: { /* Logic */ },
+                                                onStartWork: { viewModel.startWork(ticket: ticket) },
+                                                onServiceUpdate: { viewModel.selectedTicket = ticket; viewModel.showServiceUpdateSheet = true },
+                                                onEdit: { viewModel.selectedTicket = ticket; viewModel.showEditSheet = true }
+                                            )
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .padding()
+                    }
+
+                    // Footer Tabs
+                    Divider()
+                        .padding(.vertical, 4)
+                    HStack {
+                        FooterTab(icon: "house", label: "Home", selected: true)
+                        Spacer()
+                        NavigationLink(destination: CalendarView()) {
+                            FooterTab(icon: "calendar", label: "Calendar")
+                        }
+                        Spacer()
+                        NavigationLink(destination: EventView()) {
+                            FooterTab(icon: "calendar.badge.plus", label: "Events")
+                        }
+                        Spacer()
+                        NavigationLink(destination: ProfileView()) {
+                            FooterTab(icon: "person", label: "Profile")
                         }
                     }
                     .padding()
+                    .background(Color.white)
+                }
+                .edgesIgnoringSafeArea(.bottom)
+                .navigationBarBackButtonHidden(true)
+                .onAppear {
+                    viewModel.fetchTickets(onlyToday: true)
+                    viewModel.fetchAllStatusCounts()
+                }
+                .sheet(isPresented: $viewModel.showServiceUpdateSheet) {
+                    ServiceUpdateSheet(viewModel: viewModel)
+                        .presentationDetents([.fraction(0.35)]) // partial height
+                        .presentationDragIndicator(.visible)
+                        .presentationBackground(Color.white) // makes full sheet background white
                 }
 
-                // Footer Tabs
-                Divider()
-                    .padding(.vertical, 4)
-                HStack {
-                    FooterTab(icon: "house", label: "Home", selected: true)
-                    Spacer()
-                    NavigationLink(destination: CalendarView()) {
-                        FooterTab(icon: "calendar", label: "Calendar")
-                    }
-                    Spacer()
-                    NavigationLink(destination: EventView()) {
-                        FooterTab(icon: "calendar.badge.plus", label: "Events")
-                    }
-                    Spacer()
-                    NavigationLink(destination: ProfileView()) {
-                        FooterTab(icon: "person", label: "Profile")
-                    }
+                .sheet(isPresented: $viewModel.showEditSheet) {
+                    EditTicketSheet(viewModel: viewModel)
+                        .presentationDetents([.fraction(0.35)]) // partial height
+                        .presentationDragIndicator(.visible)
+                        .presentationBackground(Color.white)
                 }
-                .padding()
-            }
-            .edgesIgnoringSafeArea(.bottom)
-            .navigationBarBackButtonHidden(true)
-            .onAppear {
-                viewModel.fetchTickets(onlyToday: true)
-                viewModel.fetchAllStatusCounts()
-            }
-            .sheet(isPresented: $viewModel.showServiceUpdateSheet) {
-                ServiceUpdateSheet(viewModel: viewModel)
-            }
-            .sheet(isPresented: $viewModel.showEditSheet) {
-                EditTicketSheet(viewModel: viewModel)
             }
         }
     }
@@ -190,18 +203,26 @@ struct ServiceUpdateSheet: View {
         VStack(spacing: 20) {
             Text("Service Update")
                 .font(.headline)
-
-            // Dropdown using Picker
-            Picker("Select Reason", selection: $viewModel.serviceReason) {
+                .foregroundColor(.black)
+            // Dropdown using Menu (text box style)
+            Menu {
                 ForEach(viewModel.serviceReasons, id: \.self) { reason in
-                    Text(reason).tag(reason)
+                    Button(reason) {
+                        viewModel.serviceReason = reason
+                    }
                 }
+            } label: {
+                HStack {
+                    Text(viewModel.serviceReason.isEmpty ? "Select Reason" : viewModel.serviceReason)
+                        .foregroundColor(viewModel.serviceReason.isEmpty ? .gray : .black)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .foregroundColor(.gray)
+                }
+                .padding()
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(8)
             }
-            .pickerStyle(MenuPickerStyle())
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(8)
 
             // Custom reason if 'Other' selected
             if viewModel.serviceReason == "Other" {
@@ -219,11 +240,12 @@ struct ServiceUpdateSheet: View {
                 Button("Save") {
                     viewModel.handleServiceUpdate()
                 }
-                .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
-                ))
+                .buttonStyle(ActionButtonStyle(color: Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)))
             }
         }
         .padding()
+        .background(Color.white)
+        .cornerRadius(16)
     }
 }
 
@@ -234,7 +256,7 @@ struct EditTicketSheet: View {
         VStack(spacing: 20) {
             Text("Update Ticket Status")
                 .font(.headline)
-
+                .foregroundColor(.black)
             Picker("Select Status", selection: $viewModel.editStatus) {
                 ForEach(viewModel.editStatuses, id: \.self) { status in
                     Text(status).tag(status)
@@ -242,11 +264,17 @@ struct EditTicketSheet: View {
             }
             .pickerStyle(SegmentedPickerStyle())
             .padding()
+            .background(
+                Color(UIColor.systemGray5)
+                    .cornerRadius(8)
+            )
+            .accentColor(.white) // This sets the color of the selected segment
             // Show reason only for On Hold or Pending
             if viewModel.editStatus == "On Hold" || viewModel.editStatus == "Pending" {
                 TextField("Enter reason", text: $viewModel.editReason)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .padding(.horizontal)
+                    .background(Color.white)
             }
             HStack {
                 Button("Cancel") { viewModel.showEditSheet = false }
@@ -258,6 +286,8 @@ struct EditTicketSheet: View {
             }
         }
         .padding()
+        .background(Color.white)
+        .cornerRadius(16)
     }
 }
 
@@ -274,13 +304,16 @@ struct StatusCard: View {
                 VStack(alignment: .leading) {
                     Text(title)
                         .font(.headline)
+                        .foregroundColor(.black)
                     Text("\(count)")
                         .font(.title)
+                        .foregroundColor(.black)
                         .bold()
                 }
                 Spacer()
                 Image(systemName: icon)
                     .font(.title2)
+                    .foregroundColor(.black)
             }
             .padding()
         }
@@ -355,6 +388,7 @@ struct TicketCard: View {
                     HStack {
                         Text("Category:")
                             .font(.system(size: 12))
+                            .foregroundColor(.black)
                         Text(ticket.category_name)
                             .bold()
                             .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)
@@ -365,6 +399,7 @@ struct TicketCard: View {
                     HStack {
                         Text("Location:")
                             .font(.system(size: 12))
+                            .foregroundColor(.black)
                         Text(ticket.region_name)
                             .bold()
                             .foregroundColor(Color(red: 0 / 255, green: 128 / 255, blue: 128 / 255)

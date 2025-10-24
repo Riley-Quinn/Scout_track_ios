@@ -128,6 +128,7 @@ struct EventView: View {
             }
             .padding()
         }
+        .background(Color.white)
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarBackButtonHidden(true)
         .onAppear {

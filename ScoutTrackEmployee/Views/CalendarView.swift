@@ -161,6 +161,7 @@ struct CalendarView: View {
             }
             .padding()
         }
+        .background(Color.white)
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarBackButtonHidden(true)
         .onAppear {
@@ -312,6 +313,7 @@ struct CalendarView: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .lineLimit(1)
+                        .foregroundColor(.black)
                     Text(ticket.region_name ?? "")
                         .font(.caption2)
                         .foregroundColor(.gray)
@@ -731,6 +733,7 @@ struct DayCell: View {
             Button(action: { onDateSelected(day.date) }) {
                 Text(day.number > 0 ? "\(day.number)" : "")
                     .font(.system(size: 12, weight: day.isToday ? .bold : .regular))
+                    .foregroundColor(.black)
                     .foregroundColor(foregroundColor)
                     .frame(width: 28, height: 28)
                     .background(backgroundColor)

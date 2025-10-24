@@ -112,6 +112,7 @@ struct ChangePasswordView: View {
                 .padding(.horizontal, 20)
             }
         }
+        .background(Color.white)
         .edgesIgnoringSafeArea(.top)
     }
 
@@ -187,13 +188,15 @@ struct ChangePasswordView: View {
                     .stroke(Color.black, lineWidth: 1)
                 HStack {
                     if isSecure {
-                        SecureField(title, text: text)
+                        SecureField("", text: text, prompt: Text(title).foregroundColor(.black))
                             .padding(.leading, 10)
                             .padding(.vertical, 12)
+                            .foregroundColor(.black)
                     } else {
-                        TextField(title, text: text)
+                        TextField("", text: text, prompt: Text(title).foregroundColor(.black))
                             .padding(.leading, 10)
                             .padding(.vertical, 12)
+                            .foregroundColor(.black)
                     }
 
                     Button(action: { showToggle.wrappedValue.toggle() }) {

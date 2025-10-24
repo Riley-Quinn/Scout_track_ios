@@ -1,12 +1,13 @@
-import SwiftUI
 import CoreData
+import SwiftUI
 import UIKit
 
 // MARK: - Login View
+
 struct LoginView: View {
     @EnvironmentObject var appDelegate: AppDelegate
-    @State private var email = "testemp@gmail.com"
-    @State private var password = "Password123!"
+    @State private var email = ""
+    @State private var password = ""
     @State private var isLoading = false
     @State private var alertMessage = ""
     @State private var showAlert = false
@@ -94,6 +95,7 @@ struct LoginView: View {
     }
 
     // MARK: - Login Logic (Online + Offline)
+
     private func handleLogin() {
         guard !email.isEmpty, !password.isEmpty else {
             alertMessage = "Please enter email and password"
@@ -124,7 +126,8 @@ struct LoginView: View {
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200,
                   let data = data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let empData = json["empData"] as? [String: Any] else {
+                  let empData = json["empData"] as? [String: Any]
+            else {
                 DispatchQueue.main.async {
                     self.alertMessage = "Invalid email or password"
                     self.showAlert = true
@@ -132,21 +135,22 @@ struct LoginView: View {
                 return
             }
 
-DispatchQueue.main.async {
-    saveUserData(empData)
-    appDelegate.requestNotificationPermission {
-        // Wait a bit for APNs registration to complete
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            appDelegate.fetchFCMTokenIfReady()
-            navigateToDashboard()
-        }
-    }
-}
+            DispatchQueue.main.async {
+                saveUserData(empData)
+                appDelegate.requestNotificationPermission {
+                    // Wait a bit for APNs registration to complete
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        appDelegate.fetchFCMTokenIfReady()
+                        navigateToDashboard()
+                    }
+                }
+            }
 
         }.resume()
     }
 
     // MARK: - Offline Login
+
     private func handleOfflineLogin() {
         let fetchRequest: NSFetchRequest<User> = User.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "email == %@ AND password == %@", email, password)
@@ -157,16 +161,17 @@ DispatchQueue.main.async {
                 print("✅ Offline login success")
                 navigateToDashboard()
             } else {
-                self.alertMessage = "Offline login failed. Please connect to the internet."
-                self.showAlert = true
+                alertMessage = "Offline login failed. Please connect to the internet."
+                showAlert = true
             }
         } catch {
-            self.alertMessage = "Error checking offline login"
-            self.showAlert = true
+            alertMessage = "Error checking offline login"
+            showAlert = true
         }
     }
 
     // MARK: - Save User to CoreData + Defaults
+
     private func saveUserData(_ empData: [String: Any]) {
         UserDefaults.standard.set(empData["userId"], forKey: "userId")
         UserDefaults.standard.set(empData["name"], forKey: "name")
@@ -190,6 +195,7 @@ DispatchQueue.main.async {
     }
 
     // MARK: - Permission Dialog Handling
+
     private func handlePermissionAllow() {
         showPermissionDialog = false
         appDelegate.requestNotificationPermission {
@@ -210,6 +216,7 @@ DispatchQueue.main.async {
 }
 
 // MARK: - Custom TextField
+
 struct CustomTextField: View {
     let icon: String
     let placeholder: String
@@ -244,6 +251,7 @@ struct CustomTextField: View {
 }
 
 // MARK: - Permission Dialog View
+
 struct PermissionDialogView: View {
     @Binding var isPresented: Bool
     let onAllow: () -> Void
@@ -294,6 +302,7 @@ struct PermissionDialogView: View {
 }
 
 // MARK: - Color Extension
+
 extension Color {
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
